@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Codi · 나의 옷장</title>
+<style>
+  :root{
+    --bg:#11100d; --panel:#1a1916; --panel2:#222019;
+    --ink:#f4f1ea; --sub:#9a9489; --line:#332f27; --accent:#c97b4a; --blue:#5aa0d8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0b0a08;color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:560px;margin:0 auto;min-height:100vh;background:var(--bg);
+    border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  .head{padding:22px 22px 14px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel) 0%,var(--bg) 100%)}
+  .eyebrow{font-size:12px;letter-spacing:3px;color:var(--accent);font-weight:700}
+  .title{font-size:27px;font-weight:800;letter-spacing:-.5px;margin-top:2px}
+  .sub{font-size:13px;color:var(--sub);margin-top:3px}
+  .row{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
+  button{cursor:pointer;border:none;font:inherit;transition:all .15s}
+  .tabs{display:flex;gap:6px;margin-top:16px}
+  .tab{padding:10px 16px;border-radius:10px;background:transparent;color:var(--sub);font-weight:600;font-size:14px}
+  .tab.on{background:var(--panel2);color:var(--ink)}
+  .body{padding:18px}
+  .wbadge{background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;color:var(--ink);text-align:right;min-width:160px}
+  .wbadge .d{font-size:11px;color:var(--sub)}
+  .wbadge .t{font-size:19px;font-weight:800;margin-top:1px}
+  .wbadge .t small{font-size:13px;color:var(--sub);font-weight:600}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px}
+  .chip{padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:var(--panel2);color:var(--sub)}
+  .chip.on{background:var(--accent);color:#1a1a1a}
+  .swatch{width:14px;height:14px;border-radius:4px;border:1px solid var(--line);flex:0 0 auto}
+  .inp{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);
+    background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px}
+  .inp:focus{outline:2px solid #c97b4a55;border-color:var(--accent)}
+  label.f{font-size:11.5px;color:var(--sub);display:block}
+  label.f input,label.f select{margin-top:3px}
+  .primary{background:var(--accent);color:#1a1a1a;font-weight:700;border-radius:10px;padding:11px}
+  .ghost{background:var(--panel2);color:var(--sub);font-weight:600;border-radius:10px;padding:11px 18px}
+  @media (prefers-reduced-motion:reduce){button{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="row">
+      <div>
+        <div class="eyebrow">CODI · 서울</div>
+        <div class="title">나의 옷장</div>
+        <div class="sub" id="subline">불러오는 중…</div>
+      </div>
+      <button class="wbadge" id="wbadge" title="날씨 새로고침">
+        <div class="d" id="wdate">—</div>
+        <div class="t" id="wtemp">—</div>
+        <div class="d" id="wrain">—</div>
+      </button>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-tab="today">오늘 코디</button>
+      <button class="tab" data-tab="closet">옷장</button>
+      <button class="tab" data-tab="add">추가</button>
+    </div>
+  </div>
+  <div class="body" id="view"></div>
+</div>
+
+<script>
+// ====== 카테고리 ======
+const CATEGORIES={OT:"아우터",TP:"상의",BT:"하의",SH:"신발",AC:"액세서리",PF:"향수",UN:"미분류"};
+
+// ====== 시드 데이터 (BT007 중복 → BT007~BT016 재배열 적용) ======
+const SEED=[
+{code:"OT001",cat:"OT",brand:"Levi's",name:"Blue Tab™ Denim Mac Coat",size:"L",color:"인디고",material:"데님",note:"세련된 데님 맥코트"},
+{code:"OT002",cat:"OT",brand:"Levi's",name:"타입 2 데님 트러커 자켓",size:"L",color:"인디고",fit:"레귤러",material:"데님",note:"클래식 실루엣"},
+{code:"OT003",cat:"OT",brand:"Uniqlo",name:"JWA 집업 블루종",color:"아이보리",note:"부드러운 인상"},
+{code:"OT004",cat:"OT",brand:"Uniqlo",name:"해링턴 자켓",size:"L",color:"베이지",note:"출근용 근본 아우터"},
+{code:"OT005",cat:"OT",brand:"Polo Ralph Lauren",name:"베이직 윈드브레이커",fit:"레귤러",material:"폴리",note:"스포티 무드"},
+{code:"TP001",cat:"TP",brand:"Polo Ralph Lauren",name:"옥스포드 셔츠",size:"M(105)",color:"화이트",pattern:"솔리드",material:"면",note:"버튼다운 근본 셔츠"},
+{code:"TP002",cat:"TP",brand:"Thomas More",name:"스트라이프 셔츠",size:"XL",color:"그레이",pattern:"스트라이프",note:"시티보이 무드"},
+{code:"TP003",cat:"TP",brand:"Uniqlo",name:"JWA 데님 셔츠",color:"블루",material:"데님",note:"워크웨어 · 셔츠 아우터"},
+{code:"TP004",cat:"TP",brand:"",name:"캐시미어 니트",pattern:"솔리드",fit:"레귤러",material:"울",note:"라운드 넥"},
+{code:"TP005",cat:"TP",brand:"Levi's",name:"릴렉스 반팔 티",size:"L",color:"Caviar",fit:"릴렉스",note:"기본 레이어드 반팔"},
+{code:"TP006",cat:"TP",brand:"Levi's",name:"클래식 포켓 셔츠",pattern:"솔리드",fit:"레귤러",material:"면",note:"아메리카나"},
+{code:"TP007",cat:"TP",brand:"",name:"피너츠 그래픽 티셔츠",pattern:"그래픽",note:"아메리칸 캐주얼 포인트"},
+{code:"TP008",cat:"TP",brand:"Uniqlo",name:"에어리즘 오버사이즈 T",size:"XL~XXL",color:"화이트",fit:"오버핏",material:"면",note:"시티보이 · 이너"},
+{code:"TP009",cat:"TP",brand:"Uniqlo",name:"에어리즘 크루넥 T",color:"화이트",material:"면",note:"이너"},
+{code:"TP010",cat:"TP",brand:"Uniqlo",name:"심리스 티셔츠",color:"베이지",pattern:"솔리드",note:"비침 방지 이너"},
+{code:"TP011",cat:"TP",brand:"마뗑킴",name:"APPLIQUE FELT LOGO TOP",size:"M",color:"아이보리",date:"2026-04-30"},
+{code:"TP012",cat:"TP",brand:"브론슨",name:"Tompkins Loopwheeled Tee",size:"XXL",color:"MELANGE",date:"2026-04-30"},
+{code:"TP013",cat:"TP",brand:"페이퍼보이",name:"샌프란시스코 91 반팔티",size:"XL",color:"오트밀",date:"2026-04-30"},
+{code:"BT001",cat:"BT",brand:"Levi's",name:"550™",size:"32x30",color:"인디고",fit:"릴렉스",material:"데님",note:"여유로운 와이드 스트레이트"},
+{code:"BT002",cat:"BT",brand:"Levi's",name:"555™",size:"32x30",fit:"와이드",material:"데님",note:"밑단 넓음"},
+{code:"BT003",cat:"BT",brand:"Levi's",name:"501® 오리지널 RIGID",size:"35x32",color:"인디고",fit:"스트레이트",material:"데님",note:"근본 스트레이트"},
+{code:"BT004",cat:"BT",brand:"Levi's",name:"511™",size:"34",color:"인디고",fit:"슬림",material:"데님",note:"슬림 핏"},
+{code:"BT005",cat:"BT",brand:"Uniqlo",name:"JWA 셀비지 데님",size:"33x30",color:"인디고",material:"데님",note:"다크 인디고 · 셀비지"},
+{code:"BT006",cat:"BT",brand:"Uniqlo",name:"감탄 슬랙스",size:"33",color:"네이비",fit:"레귤러",material:"혼방",note:"비즈니스 스마트 필수"},
+{code:"BT007",cat:"BT",brand:"Levi's",name:"502",size:"32x30",color:"인디고",material:"데님"},
+{code:"BT008",cat:"BT",brand:"Levi's",name:"541™ Athletic Taper",size:"33x30",color:"인디고",material:"데님"},
+{code:"BT009",cat:"BT",brand:"Levi's",name:"568™ Loose Linen+ Denim",size:"33x30",color:"Tinted Heavy Metal",material:"데님"},
+{code:"BT010",cat:"BT",brand:"Levi's",name:"LVC 1954 501® ORGANIC RIGID",size:"36x34",color:"인디고",fit:"스트레이트",material:"데님",note:"생지, 소킹 후 수축"},
+{code:"BT011",cat:"BT",brand:"지오다노",name:"아이보리 치노 팬츠",size:"33",color:"아이보리",fit:"레귤러",material:"면",note:"미니멀 룩"},
+{code:"BT012",cat:"BT",brand:"Hazzys",name:"코튼 치노 팬츠",size:"32",color:"네이비",fit:"레귤러",material:"면",note:"스마트 치노"},
+{code:"BT013",cat:"BT",brand:"LF",name:"네이비 면혼방 팬츠",color:"네이비",pattern:"솔리드",material:"혼방",date:"2025-10-27"},
+{code:"BT014",cat:"BT",brand:"LF",name:"베이지 스트레이트핏 팬츠",color:"베이지",material:"혼방",date:"2025-10-27"},
+{code:"BT015",cat:"BT",brand:"롯데쇼핑",name:"502 테이퍼드 핏 진",size:"32(82)",color:"다크인디고",date:"2025-12-06"},
+{code:"BT016",cat:"BT",brand:"롯데쇼핑",name:"555 96 릴렉스드 스트레이트 진",size:"34(86)",color:"다크인디고",date:"2025-12-02"},
+{code:"SH001",cat:"SH",brand:"New Balance",name:"860v14",size:"275mm(4E)",color:"그레이",note:"인생 신발 기준점"},
+{code:"SH002",cat:"SH",brand:"New Balance",name:"MR993GL (USA)",size:"285",color:"그레이",note:"스테디셀러"},
+{code:"SH003",cat:"SH",brand:"New Balance",name:"992 시리즈",size:"285mm(4E)",color:"그레이",pattern:"솔리드",note:"시그니처"},
+{code:"SH004",cat:"SH",brand:"New Balance",name:"990 시리즈 (v3/v4/v6)",size:"280~285mm(4E)",color:"그레이",note:"압도적 편안함"},
+{code:"SH005",cat:"SH",brand:"New Balance",name:"991v2 포지드 아이언",size:"290mm",color:"그레이",note:"사이즈 업"},
+{code:"SH006",cat:"SH",brand:"New Balance",name:"ML2002RC / 2002R",size:"285mm",color:"그레이",note:"빈티지 팩"},
+{code:"SH007",cat:"SH",brand:"New Balance",name:"1080v6 / 740sg / 530sg",color:"그레이",note:"보유 중"},
+{code:"SH008",cat:"SH",brand:"Adidas",name:"핸드볼 스페지알",size:"280~285",color:"크림",material:"가죽",note:"아카이브"},
+{code:"SH009",cat:"SH",brand:"Adidas",name:"삼바 디콘",color:"화이트",fit:"슬림",material:"가죽",note:"슬림 실루엣"},
+{code:"SH010",cat:"SH",brand:"Adidas",name:"스탠 스미스",color:"화이트",material:"가죽",note:"미니멀"},
+{code:"SH011",cat:"SH",brand:"",name:"페니 로퍼",color:"블랙",material:"가죽",note:"기본 로퍼"},
+{code:"SH012",cat:"SH",brand:"야세",name:"더비 슈즈",color:"블랙",material:"가죽"},
+{code:"SH013",cat:"SH",brand:"New Balance",name:"992 그레이",size:"285",color:"그레이"},
+{code:"SH014",cat:"SH",brand:"New Balance",name:"992 네이비",size:"285",color:"네이비"},
+{code:"SH015",cat:"SH",brand:"New Balance",name:"992 블랙",size:"285",color:"블랙",note:"핵심 소장"},
+{code:"SH016",cat:"SH",brand:"New Balance",name:"Fresh Foam / FuelCell",size:"285",note:"워킹/러닝"},
+{code:"SH017",cat:"SH",brand:"Asics",name:"노바블라스트 5",size:"280~285",note:"데일리 러닝"},
+{code:"SH018",cat:"SH",brand:"뉴발란스",name:"USA 998 U998",size:"255",color:"그레이",price:"171,900",date:"2026-05-25"},
+{code:"SH019",cat:"SH",brand:"Clarks",name:"데저트 부츠",size:"275~280",material:"가죽",note:"크레페 솔"},
+{code:"SH020",cat:"SH",brand:"Rockport",name:"드레스 로퍼 & 플레인 토",size:"270",material:"가죽",note:"출근 구두"},
+{code:"SH021",cat:"SH",brand:"New Balance",name:"990v4 그레이 (USA)",size:"285",color:"그레이"},
+{code:"SH022",cat:"SH",brand:"New Balance",name:"990v4 네이비 (USA)",size:"285",color:"네이비"},
+{code:"SH023",cat:"SH",brand:"New Balance",name:"990v6 (USA)",size:"285",note:"V6 플랫폼"},
+{code:"SH024",cat:"SH",brand:"New Balance",name:"993 네이비 (USA)",size:"285",color:"네이비",note:"Extra Wide"},
+{code:"SH025",cat:"SH",brand:"New Balance",name:"996 그레이 (USA)",size:"285",color:"그레이"},
+{code:"SH026",cat:"SH",brand:"New Balance",name:"998 그레이 (USA)",size:"285",color:"그레이"},
+{code:"SH027",cat:"SH",brand:"Onitsuka Tiger",name:"멕시코 66 블랙화이트",size:"280~285",color:"블랙"},
+{code:"SH028",cat:"SH",brand:"Onitsuka Tiger",name:"멕시코 66 크림 세이지",size:"245",color:"크림",note:"가족 선물용"},
+{code:"SH029",cat:"SH",brand:"Adidas",name:"삼바 OG 그린/화이트",size:"280~285",color:"화이트",note:"에센셜"},
+{code:"SH030",cat:"SH",brand:"Adidas",name:"삼바 OG 네이비/크림",color:"네이비"},
+{code:"SH031",cat:"SH",brand:"Adidas",name:"삼바 데콘 블랙",color:"블랙"},
+{code:"SH032",cat:"SH",brand:"Adidas",name:"삼바 데콘 화이트",size:"280~285",color:"화이트",material:"가죽",note:"최애템"},
+{code:"SH033",cat:"SH",brand:"Asics",name:"슈퍼블라스트 2",size:"280~285",note:"퍼포먼스 러닝"},
+{code:"SH034",cat:"SH",brand:"아디다스",name:"삼바 데콘 IF0641",size:"270",color:"블랙",price:"77,730",date:"2026-05-25"},
+{code:"SH035",cat:"SH",brand:"Ecco",name:"하이브리드 컴포트화",size:"270~275",material:"가죽",note:"GTX 방수"},
+{code:"AC001",cat:"AC",brand:"",name:"Leather Braid Belt",color:"브라운",material:"가죽",note:"위빙 벨트 · 턱인 코디"},
+{code:"PF001",cat:"PF",brand:"Nonfiction",name:"가이악 플라워",note:"우디+꽃향 · 마무리 필수"},
+{code:"PF002",cat:"PF",brand:"Jo Malone",name:"우드 세이지 앤 씨 솔트 외",note:"보유 중"},
+{code:"PF003",cat:"PF",brand:"Tom Ford",name:"OUD WOOD",note:"보유 중"},
+{code:"PF004",cat:"PF",brand:"Maison Margiela",name:"레이지 선데이 모닝",note:"보유 중"},
+{code:"UN001",cat:"UN",brand:"Polo Ralph Lauren",name:"Classic Fit Mesh Polo",size:"M",color:"Cabana Purple",date:"2020-08-23"}
+];
+
+// ====== 저장 ======
+const KEY="codi:wardrobe:v1";
+function load(){try{const r=localStorage.getItem(KEY);if(r){const p=JSON.parse(r);if(Array.isArray(p)&&p.length)return p;}}catch(e){}return SEED.slice();}
+function save(items){try{localStorage.setItem(KEY,JSON.stringify(items));return true;}catch(e){alert("저장 공간이 가득 찼어요. 사진은 용량을 많이 차지해요. 사진 일부를 삭제하거나, 텍스트는 CSV로 내보내 백업해 주세요.");return false;}}
+let ITEMS=load();
+let WEATHER={high:31,low:19,cond:"맑음",rain:false,date:new Date().toISOString().slice(0,10),loading:true};
+
+// ====== 색상 → hex ======
+function colorToHex(c){c=(c||"").toLowerCase();
+  if(/인디고|indigo|다크인디고/.test(c))return"#34507a";
+  if(/네이비|navy/.test(c))return"#1f2a44";
+  if(/블루|blue/.test(c))return"#3b6ea5";
+  if(/화이트|white|아이보리/.test(c))return"#f4f1ea";
+  if(/그레이|grey|gray|melange|오트밀/.test(c))return"#9a9a93";
+  if(/블랙|black|caviar/.test(c))return"#1a1a1a";
+  if(/베이지|크림|누드/.test(c))return"#d8c9a8";
+  if(/브라운|brown/.test(c))return"#5a3d28";
+  if(/올리브|그린|green|세이지/.test(c))return"#6b7152";
+  if(/purple|퍼플/.test(c))return"#7a5a8a";
+  return"#b8b2a3";}
+
+// ====== 코디 엔진 ======
+// ====== v3 점수화 엔진 (코디_알고리즘_통합가이드_v3 반영) ======
+// 파생 태그 추론 — 원본 필드(color/fit/material/name/note)에서 톤·명도·계절·격식·핏 도출
+function _txt(i){return ((i&&i.name)||"")+" "+((i&&i.note)||"")+" "+((i&&i.material)||"")+" "+((i&&i.color)||"")+" "+((i&&i.fit)||"");}
+function toneOf(i){const c=((i&&i.color)||"")+_txt(i);
+  if(/인디고|네이비|그레이|블랙|차콜|navy|charcoal|caviar/i.test(c))return"COOL";
+  if(/베이지|아이보리|크림|브라운|오트밀|카멜|탄|khaki|카키/i.test(c))return"WARM";
+  if(/화이트|melange|멜란지|화이트|white/i.test(c))return"NEUTRAL";
+  return"NEUTRAL";}
+function valueOf(i){const c=((i&&i.color)||"")+_txt(i);
+  if(/다크인디고|다크 인디고|블랙|네이비|차콜|인디고|raw|rigid|생지|셀비지/i.test(c))return"DARK";
+  if(/아이보리|화이트|크림|베이지|오트밀|white/i.test(c))return"LIGHT";
+  return"MID";}
+function seasonOf(i){const c=_txt(i);
+  if(/린넨|linen|에어리즘|반팔|심리스|메시/i.test(c))return"SS";
+  if(/울|캐시미어|니트|코트|부츠|기모|플란넬/i.test(c))return"FW";
+  return"ALL";}
+function formalityOf(i){const c=_txt(i);
+  if(/슬랙스|로퍼|구두|더비|드레스|해링턴|맥코트|블레이저|blazer|옥스포드 셔츠/i.test(c))return 3;
+  if(/그래픽|릴렉스|반팔|tee|티셔츠|러닝|fresh foam|fuelcell|노바|슈퍼블라스트|삼바|samba/i.test(c))return 1;
+  return 2;}
+function fitCatOf(i){const f=((i&&i.fit)||"")+" "+((i&&i.name)||"");
+  // 하이브리드 우선: 선호(스트레이트/레귤러)가 하나라도 있으면 선호로 분류 (5-C)
+  const hasPref=/스트레이트|straight|레귤러|regular|501|502/i.test(f);
+  const hasWide=/와이드|릴렉스|loose|wide|relax|550|555|568/i.test(f);
+  const hasSlim=/슬림|테이퍼|slim|taper|511|541/i.test(f);
+  if(hasPref)return"PREF";          // 레귤러·스트레이트 (하이브리드도 여기)
+  if(hasWide)return"WIDE";
+  if(hasSlim)return"SLIM";
+  return"REGULARish";}
+// 채도 높은 포인트 컬러 여부
+function isVivid(i){return /피너츠|그래픽|caviar|purple|퍼플|레드|옐로|그린|오렌지|핑크/i.test(_txt(i));}
+// 패턴
+function patternOf(i){return (i&&i.pattern)||"";}
+
+// 코어 3종(top,bottom,shoe) 점수 — 만점 100 + 선호 가중
+function scoreCore(top,bottom,shoe){
+  if(!top||!bottom)return null;
+  const reasons=[];
+  // --- 무효: SS+FW 직접 혼합 ---
+  const seasons=[top,bottom,shoe].filter(Boolean).map(seasonOf);
+  if(seasons.includes("SS")&&seasons.includes("FW"))return {invalid:true,reason:"SS+FW 계절 충돌"};
+  // --- 무효: 상·하 동시 패턴 ---
+  const pT=patternOf(top),pB=patternOf(bottom);
+  const patterned=p=>p&&!/솔리드|무지|없음|plain/i.test(p);
+  if(patterned(pT)&&patterned(pB))return {invalid:true,reason:"상·하 동시 패턴"};
+
+  // ===== 색상 35 =====
+  let color=0;
+  const tones=[toneOf(top),toneOf(bottom)].concat(shoe?[toneOf(shoe)]:[]);
+  const uniqTones=[...new Set(tones)];
+  const cools=tones.filter(x=>x==="COOL").length, warms=tones.filter(x=>x==="WARM").length, neus=tones.filter(x=>x==="NEUTRAL").length;
+  // 톤 일관성 15
+  if(uniqTones.length===1){color+=15;reasons.push("톤 일관성 15");}
+  else if(cools&&warms){ if(neus){color+=9;reasons.push("톤 완충 9");} else {color+=4;reasons.push("톤 충돌 4");} }
+  else {color+=13;reasons.push("톤 근접 13");}
+  // 명도 대비 12
+  const vT=valueOf(top),vB=valueOf(bottom);
+  const order={LIGHT:0,MID:1,DARK:2};
+  const diff=Math.abs(order[vT]-order[vB]);
+  if(diff===1){color+=12;reasons.push("명도 대비 12");}
+  else if(diff===0){color+=7;reasons.push("원톤 7");}
+  else {color+=9;reasons.push("명도차 9");}
+  // 포인트 절제 8
+  const vivids=[top,bottom,shoe].filter(Boolean).filter(isVivid).length;
+  if(vivids<=1){color+=8;} else {color+=4;reasons.push("포인트 과다 4");}
+  // 미니멀 보너스 +3
+  if(tones.every(x=>x==="NEUTRAL"||x==="WARM")&&vivids===0&&diff<=1){color+=3;reasons.push("미니멀 +3");}
+
+  // ===== 계절·소재 28 =====
+  let sm=0;
+  const sUniq=[...new Set(seasons)];
+  if(sUniq.length===1){sm+=16;reasons.push("계절 일치 16");}
+  else {sm+=13;reasons.push("ALL 혼합 13");}
+  // 소재 질감 12: 매트 베이스 + 가죽 신발
+  const leatherShoe=shoe&&/가죽|leather|로퍼|구두|더비/i.test(_txt(shoe));
+  const allDenim=/데님/.test(top.material||"")&&/데님/.test(bottom.material||"");
+  if(leatherShoe){sm+=12;reasons.push("질감 대비 12");}
+  else if(allDenim){sm+=9;reasons.push("올데님 9");}
+  else {sm+=10;}
+
+  // ===== 실루엣 22 =====
+  let sil=0;
+  const fB=fitCatOf(bottom);
+  const overTop=/오버|over|릴렉스|relax/i.test((top.fit||"")+(top.name||""));
+  if(fB==="PREF"||fB==="REGULARish"){sil+=22;reasons.push("스트레이트·레귤러 22");}
+  else if(fB==="WIDE"){sil+= overTop?10:18; reasons.push(overTop?"상하 볼륨 과다 10":"와이드 밸런스 18");}
+  else if(fB==="SLIM"){sil+= overTop?18:12; reasons.push(overTop?"슬림+오버 18":"슬림 타이트 12");}
+  // 신발 볼륨 보정 +2
+  if(shoe&&/993|992|990|2002|1906/i.test(shoe.name||"")&&(fB==="PREF"||fB==="REGULARish"))sil=Math.min(22,sil+2);
+
+  // ===== 격식 15 =====
+  let form=0;
+  const fset=[formalityOf(top),formalityOf(bottom)].concat(shoe?[formalityOf(shoe)]:[]);
+  const fdiff=Math.max(...fset)-Math.min(...fset);
+  if(fdiff===0){form+=15;reasons.push("격식 일치 15");}
+  else if(fdiff===1){form+=12;reasons.push("시티 캐주얼 12");}
+  else {form+=6;reasons.push("격식 편차 6");}
+
+  let base=color+sm+sil+form;
+
+  // ===== 개인 선호 가중 ± =====
+  let pref=0;
+  // 하의 다크 인디고 +5
+  if(/다크인디고|다크 인디고/.test(bottom.color||"")|| (/인디고/.test(bottom.color||"")&&valueOf(bottom)==="DARK")){pref+=5;reasons.push("다크 인디고 +5");}
+  else if(/인디고/.test(bottom.color||"")){pref+=5;reasons.push("인디고 +5");}
+  // 핏 선호 (5-B + 하이브리드 5-C)
+  if(fB==="PREF"){pref+=5;reasons.push("레귤러·스트레이트 +5");}
+  else if(fB==="SLIM"){pref-=2;reasons.push("슬림 −2");}
+  else if(fB==="WIDE"){pref-=4;reasons.push("와이드 −4");}
+
+  const total=base+pref;
+  let grade= total>=90?"A":total>=75?"B":total>=60?"C":"X";
+  return {invalid:false,base:Math.round(base),pref,total:Math.round(total),grade,reasons};
+}
+
+// 아우터 정합 점수 (톤 일치/뉴트럴 우선) — 후보 정렬용
+function outerFit(base,outer){
+  if(!outer)return -1;
+  let s=0; const bt=toneOf(base);
+  const ot=toneOf(outer);
+  if(ot===bt||ot==="NEUTRAL")s+=3;
+  // 계절 충돌 제외
+  const so=seasonOf(outer);
+  return s;
+}
+
+function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
+// TPO 상태 (전역) — 사용자가 오늘 코디 탭에서 토글
+let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
+
+function fitGuide(item,role,t){
+  // 기장/턱인 가이드 — 기온과 아이템 성격 반영
+  const g=[];
+  if(role==="bottom"){
+    if(/데님|치노|슬랙스/.test((item.material||"")+(item.name||""))){
+      if(t>=28)g.push("밑단 1~2회 롤업 → 발목 노출로 시각적 시원함");
+      else if(t>=24)g.push("살짝 롤업하면 가벼운 인상");
+    }
+  }
+  if(role==="top"){
+    if(/오버|릴렉스|그래픽|반팔|tee/i.test((item.name||"")+(item.fit||""))) g.push("자연스럽게 빼서(Tuck-out) 편하게");
+    else if(/셔츠|폴로|니트/.test(item.name||"")) g.push("앞만 살짝 넣는 프렌치턱이 비율에 유리");
+  }
+  return g;
+}
+
+function textureNote(top,bottom){
+  // 텍스처 믹스 제안
+  const roughBottom=/린넨|linen|568|생지|rigid|셀비지|raw|loose/i.test((bottom?.name||"")+(bottom?.material||""));
+  const denimBottom=/데님/.test(bottom?.material||"");
+  const smoothTop=/에어리즘|심리스|폴리|옥스포드|폴로/i.test(top?.name||"");
+  const knitTop=/니트|캐시미어/.test((top?.name||"")+(top?.material||""));
+  if(roughBottom&&smoothTop) return "질감 있는 하의엔 슬러브(slub) 티가 더 고급스러워요 — 매끈한 이너보다 거친 면을 매칭";
+  if(roughBottom) return "거친 질감의 하의 + 살짝 슬러브 있는 상의로 소재 대비를 주면 입체감↑";
+  if(denimBottom&&knitTop) return "데님의 거친 질감과 니트의 부드러움이 좋은 대비를 만들어요";
+  if(denimBottom&&smoothTop) return "매끈한 상의라면 데님을 워싱·롤업해 질감을 살리면 밋밋함을 덜 수 있어요";
+  return null;
+}
+
+function buildCodis(items,w){
+  const t=w.high,rain=w.rain;
+  const C=c=>items.filter(i=>i.cat===c);
+  const outers=C("OT"),tops=C("TP"),bottoms=C("BT"),shoes=C("SH"),perfumes=C("PF"),accs=C("AC");
+  const isHeavy=i=>/울|캐시미어|니트/.test((i.material||"")+(i.name||""));
+  const isShort=i=>/반팔|tee|크루넥|오버사이즈 t|티셔츠/i.test(i.name||"")||/릴렉스/.test(i.fit||"");
+  let band=t>=25?"hot":t>=19?"warm":t>=13?"mild":"cold";
+  const wantTops=tops.filter(i=>band==="hot"?(isShort(i)&&!isHeavy(i)):band==="warm"?!isHeavy(i):true);
+  const wantOuter=band==="hot"?[]:outers;
+  const casualTops=wantTops.filter(i=>/그래픽|데님|오버|시티|캐주얼|반팔|tee/i.test((i.name||"")+(i.note||"")));
+  const sneakers=shoes.filter(i=>!/로퍼|구두|더비|부츠|드레스/.test((i.name||"")+(i.note||"")));
+  const dressShoes=shoes.filter(i=>/로퍼|구두|더비|드레스/.test((i.name||"")+(i.note||"")));
+  const denim=bottoms.filter(i=>/데님/.test(i.material||""));
+  const chinos=bottoms.filter(i=>/치노|슬랙스|혼방/.test((i.material||"")+(i.name||"")));
+  // 액세서리 분류 (틀만 — 옷장에 추가되면 자동 반영)
+  const watches=accs.filter(i=>/시계|watch|스트랩/i.test((i.name||"")+(i.note||"")));
+  const bracelets=accs.filter(i=>/팔찌|체인|bracelet|뱅글/i.test((i.name||"")+(i.note||"")));
+  const belts=accs.filter(i=>/벨트|belt/i.test((i.name||"")+(i.note||"")));
+  const bagsTote=accs.filter(i=>/토트|tote/i.test((i.name||"")+(i.note||"")));
+  const bagsMsg=accs.filter(i=>/메신저|크로스|messenger|숄더/i.test((i.name||"")+(i.note||"")));
+  const blazers=outers.filter(i=>/블레이저|blazer/i.test((i.name||"")));
+  const smartOuter=outers.filter(i=>/해링턴|윈드|블레이저|blazer/i.test(i.name||""));
+
+  // TPO에 따른 신발/가방 선호
+  function shoeForTPO(baseList,seed){
+    if(TPO.move==="outdoor"){const flat=baseList.filter(i=>/860|1080|fresh|fuelcell|노바|슈퍼|2002|990|993|996/i.test(i.name||""));return pick(flat.length?flat:baseList,seed);}
+    return pick(baseList,seed);
+  }
+  function bagSuggest(){
+    if(!accs.length)return TPO.move==="transit"?{placeholder:"메신저/크로스백 (좁은 차내에서 거치적거림 적음)"}:TPO.move==="outdoor"?{placeholder:"토트/백팩 (짐 수납)"}:null;
+    if(TPO.move==="transit")return bagsMsg[0]||null;
+    if(TPO.move==="outdoor")return bagsTote[0]||null;
+    return bagsMsg[0]||bagsTote[0]||null;
+  }
+
+  function accessoryLayer(style){
+    // 실제 보유 우선, 없으면 placeholder(제안 틀)
+    const out=[];
+    if(style==="minimal"||style==="biz"){
+      out.push(watches[0]||{placeholder:"가죽 스트랩 시계 — '준비된 룩'의 완성"});
+      if(bracelets[0])out.push(bracelets[0]); else if(style==="minimal")out.push({placeholder:"실버 체인 팔찌 (선택)"});
+    }else{
+      if(watches[0])out.push(watches[0]);
+    }
+    if(belts[0]&&style!=="casual")out.push(belts[0]);
+    return out;
+  }
+
+  const R=[];
+
+  // 1 캐주얼 시티보이 (+텍스처 믹스)
+  {
+    const top=pick(casualTops.length?casualTops:wantTops,t);
+    const bottom=pick(denim.length?denim:bottoms,t+1);
+    const shoe=shoeForTPO(sneakers.length?sneakers:shoes,t+2);
+    R.push({title:"캐주얼 시티보이",vibe:"가볍고 세련된 도심 캐주얼",accent:"#3b6ea5",style:"casual",
+      slots:{outer:band!=="hot"?pick(wantOuter,t+3):null,top,bottom,shoe},
+      perfume:pick(perfumes,t),
+      accessories:accessoryLayer("casual"),
+      bag:bagSuggest(),
+      texture:textureNote(top,bottom),
+      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
+  }
+
+  // 2 미니멀 클린 (+액세서리 레이어드, +비즈니스 변주)
+  {
+    const minT=wantTops.filter(i=>/솔리드|화이트|니트|셔츠|폴로|심리스/.test((i.pattern||"")+(i.color||"")+(i.name||"")));
+    const cleanS=shoes.filter(i=>/스탠 스미스|삼바|로퍼|996|992|990|998/.test(i.name||""));
+    const top=pick(minT.length?minT:wantTops,t+4);
+    const bottom=pick(chinos.length?chinos:bottoms,t+5);
+    const shoe=TPO.biz?(pick(dressShoes.length?dressShoes:cleanS,t+6)):shoeForTPO(cleanS.length?cleanS:shoes,t+6);
+    const blazer=TPO.biz?(blazers[0]||smartOuter[0]||null):null;
+    R.push({title:TPO.biz?"비즈니스 캐주얼":"미니멀 클린",vibe:TPO.biz?(blazers.length?"블레이저 한 겹으로 격을 올린 룩":"깔끔한 아우터로 격식을 더한 룩"):"조용한 럭셔리 · 단정한 무드",accent:"#6b7152",style:TPO.biz?"biz":"minimal",
+      slots:{outer:blazer||(band!=="hot"?pick(wantOuter,t+7):null),top,bottom,shoe},
+      perfume:pick(perfumes,t+1),
+      accessories:accessoryLayer(TPO.biz?"biz":"minimal"),
+      bag:bagSuggest(),
+      texture:textureNote(top,bottom),
+      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)},
+      bizHint:!TPO.biz?(blazers.length?"위 TPO에서 '비즈니스'를 켜면 블레이저를 더해드려요":"블레이저를 옷장에 추가하면 더 완성도 있는 비즈니스 변주가 가능해요"):(!blazers.length?"블레이저가 없어 깔끔한 아우터로 대체했어요":null)});
+  }
+
+  // 3 날씨 기능성
+  {
+    let title,vibe,accent,slots,style="func";
+    if(rain){
+      const ws=shoes.filter(i=>/방수|gtx|고어|ecco/i.test((i.note||"")+(i.brand||"")));
+      const top=pick(wantTops,t+8),bottom=pick(bottoms.filter(i=>/다크|블랙|네이비|인디고/.test(i.color||"")),t)||pick(bottoms,t+9);
+      title="우천 대응";vibe="비 오는 날 발 안 젖는 조합";accent="#34507a";
+      slots={outer:pick(outers.filter(i=>/윈드|폴리|블루종/.test((i.name||"")+(i.material||""))),t)||pick(outers,t),top,bottom,shoe:pick(ws.length?ws:sneakers,t)};
+    }else if(band==="hot"){
+      const top=pick(wantTops.filter(i=>/에어리즘|반팔|오버|tee/i.test((i.name||"")+(i.note||""))),t)||pick(wantTops,t);
+      const bottom=pick(denim.concat(chinos),t+10);
+      title="쿨 & 통기성";vibe="덥고 습한 날 쾌적 우선";accent="#c97b4a";
+      slots={outer:null,top,bottom,shoe:shoeForTPO(sneakers,t+11)};
+    }else{
+      const perf=shoes.filter(i=>/860|1080|fresh foam|fuelcell|노바|슈퍼블라스트/i.test(i.name||""));
+      const top=pick(wantTops,t+8),bottom=pick(bottoms,t+9);
+      title="날씨 기능성";vibe="편안한 기능성 데일리";accent="#c97b4a";
+      slots={outer:band!=="hot"?pick(wantOuter,t+12):null,top,bottom,shoe:pick(perf.length?perf:sneakers,t)};
+    }
+    R.push({title,vibe,accent,style,slots,perfume:pick(perfumes,t+2),
+      accessories:accessoryLayer("casual"),bag:bagSuggest(),
+      texture:textureNote(slots.top,slots.bottom),
+      fit:{top:fitGuide(slots.top,"top",t),bottom:fitGuide(slots.bottom,"bottom",t)}});
+  }
+  // v3 점수화: 각 코디에 점수·등급·근거 부여
+  R.forEach(c=>{
+    const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
+    if(sc&&!sc.invalid){c.score=sc.total;c.base=sc.base;c.prefBonus=sc.pref;c.grade=sc.grade;c.reasons=sc.reasons;}
+    else {c.score=null;c.grade=sc?"X":null;c.invalidReason=sc&&sc.reason;c.reasons=[];}
+  });
+  // 무효 코디도 3코디 UX 유지를 위해 후순위로만 내리고, 점수 내림차순 정렬
+  R.sort((a,b)=>(b.score==null?-1:b.score)-(a.score==null?-1:a.score));
+  return R;
+}
+
+// 코디의 slots → 표시용 pieces 배열
+function codiPieces(c){
+  return [c.slots.outer,c.slots.top,c.slots.bottom,c.slots.shoe].filter(Boolean);
+}
+// 특정 역할의 대체 아이템 풀
+function altPool(role,items,w){
+  const C=c=>items.filter(i=>i.cat===c);
+  if(role==="outer")return C("OT");
+  if(role==="top")return C("TP");
+  if(role==="bottom")return C("BT");
+  if(role==="shoe")return C("SH");
+  return [];
+}
+
+// ====== 날씨 (Open-Meteo, 키 불필요) ======
+let FORECAST=null;        // 7일 예보 배열 [{date,high,low,code,rainProb}]
+let SELECTED_DATE=null;   // 사용자가 고른 날짜 (없으면 오늘)
+let MANUAL=null;          // 수동 설정 {high,low,cond,rain} (있으면 예보 무시)
+
+async function fetchWeather(){
+  try{
+    const url="https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.978&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Asia%2FSeoul&forecast_days=7";
+    const res=await fetch(url);
+    const j=await res.json();
+    const d=j.daily;
+    FORECAST=d.time.map((date,k)=>({
+      date,
+      high:Math.round(d.temperature_2m_max[k]),
+      low:Math.round(d.temperature_2m_min[k]),
+      code:d.weather_code[k],
+      rainProb:d.precipitation_probability_max[k]||0
+    }));
+    if(!SELECTED_DATE)SELECTED_DATE=FORECAST[0].date;
+    applyWeather();
+  }catch(e){ WEATHER.loading=false; WEATHER.cond="날씨 불러오기 실패(수동 설정 가능)"; renderWeather(); if(currentTab==="today")render(); }
+}
+
+// 선택 날짜·수동 설정을 WEATHER에 반영
+function applyWeather(){
+  if(MANUAL){
+    WEATHER={high:MANUAL.high,low:MANUAL.low,cond:MANUAL.cond,rain:MANUAL.rain,date:(SELECTED_DATE||new Date().toISOString().slice(0,10))+" (수동)",loading:false,manual:true};
+  }else if(FORECAST){
+    const f=FORECAST.find(x=>x.date===SELECTED_DATE)||FORECAST[0];
+    WEATHER={high:f.high,low:f.low,cond:condText(f.code),
+      rain:f.rainProb>=50||[51,53,55,61,63,65,80,81,82,95,96,99].includes(f.code),
+      date:f.date,loading:false,manual:false};
+  }
+  renderWeather(); if(currentTab==="today") render();
+}
+
+function condText(c){
+  if(c===0)return"맑음"; if([1,2].includes(c))return"대체로 맑음"; if(c===3)return"흐림";
+  if([45,48].includes(c))return"안개"; if([51,53,55].includes(c))return"이슬비";
+  if([61,63,65,80,81,82].includes(c))return"비"; if([71,73,75,85,86].includes(c))return"눈";
+  if([95,96,99].includes(c))return"뇌우"; return"보통";
+}
+
+// ====== 렌더 ======
+let currentTab="today";
+const view=document.getElementById("view");
+function esc(s){return(s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
+
+function renderWeather(){
+  document.getElementById("wdate").textContent=WEATHER.date+" · "+WEATHER.cond;
+  document.getElementById("wtemp").innerHTML=WEATHER.high+"° <small>/ "+WEATHER.low+"°</small>";
+  const wr=document.getElementById("wrain");
+  wr.textContent=WEATHER.loading?"불러오는 중…":(WEATHER.rain?"☔ 강수 가능":"☀ 강수 없음");
+  wr.style.color=WEATHER.rain?"var(--blue)":"var(--sub)";
+  document.getElementById("subline").textContent=ITEMS.length+"벌 보유 · 서울 날씨 + 점수 기반 코디 추천";
+}
+
+function counts(){const c={};Object.keys(CATEGORIES).forEach(k=>c[k]=0);ITEMS.forEach(i=>c[i.cat]=(c[i.cat]||0)+1);return c;}
+function nextCode(cat){const n=ITEMS.filter(i=>i.cat===cat).map(i=>parseInt((i.code||"").slice(2),10)).filter(x=>!isNaN(x));return cat+String((n.length?Math.max(...n):0)+1).padStart(3,"0");}
+
+function render(){
+  if(currentTab==="today")renderToday();
+  else if(currentTab==="closet")renderCloset();
+  else renderAdd();
+}
+
+function dayLabel(dateStr,idx){
+  const wk=["일","월","화","수","목","금","토"];
+  const d=new Date(dateStr+"T00:00:00");
+  const md=(d.getMonth()+1)+"/"+d.getDate();
+  if(idx===0)return"오늘 "+md;
+  if(idx===1)return"내일 "+md;
+  return wk[d.getDay()]+" "+md;
+}
+
+const COND_OPTIONS=[["맑음",false],["대체로 맑음",false],["흐림",false],["비",true],["눈",true],["뇌우",true]];
+
+function renderWeatherPanel(){
+  const manualOn=!!MANUAL;
+  let h=`<div class="card" style="padding:14px;margin-bottom:16px">`;
+  // 날짜 선택 (예보 기준)
+  if(FORECAST){
+    h+=`<div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;font-weight:600">날짜 선택 (1주일 예보)</div>
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:${manualOn?"14px":"4px"}">`;
+    FORECAST.forEach((f,idx)=>{
+      const on=!manualOn&&f.date===SELECTED_DATE;
+      h+=`<button class="chip ${on?"on":""}" data-date="${f.date}" style="flex:0 0 auto;white-space:nowrap">${dayLabel(f.date,idx)} · ${f.high}°</button>`;
+    });
+    h+=`</div>`;
+  }else{
+    h+=`<div style="font-size:12px;color:var(--sub);margin-bottom:10px">예보를 불러오지 못했어요. 아래에서 직접 설정하세요.</div>`;
+  }
+  // 수동 설정 토글
+  h+=`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;${FORECAST?`border-top:1px solid var(--line);padding-top:12px`:""}">
+    <input type="checkbox" id="w-manual" ${manualOn?"checked":""}> 기온·날씨 직접 설정</label>`;
+  if(manualOn){
+    h+=`<div style="margin-top:12px;display:grid;gap:10px">
+      <div style="display:flex;gap:10px">
+        <label class="f" style="flex:1">최고 기온(°)<input class="inp" id="w-high" type="number" value="${MANUAL.high}"></label>
+        <label class="f" style="flex:1">최저 기온(°)<input class="inp" id="w-low" type="number" value="${MANUAL.low}"></label>
+      </div>
+      <div>
+        <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px">날씨</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${COND_OPTIONS.map(([c])=>`<button class="chip ${MANUAL.cond===c?"on":""}" data-cond="${c}" style="flex:0 0 auto">${c}</button>`).join("")}
+        </div>
+      </div>
+    </div>`;
+  }
+  h+=`</div>`;
+  return h;
+}
+
+// 세션 동안 사용자가 수정한 코디 상태 (idx → {role: itemCode})
+let CODI_OVERRIDES={};
+let CURRENT_CODIS=[];
+const ROLE_LABEL={outer:"아우터",top:"상의",bottom:"하의",shoe:"신발"};
+
+function applyOverrides(codis){
+  codis.forEach((c,idx)=>{
+    const ov=CODI_OVERRIDES[idx];if(!ov)return;
+    Object.keys(ov).forEach(role=>{
+      const it=ITEMS.find(i=>i.code===ov[role]);
+      if(it)c.slots[role]=it;
+    });
+    // 수정 시 핏/텍스처 가이드 재계산
+    c.fit={top:fitGuide(c.slots.top,"top",WEATHER.high),bottom:fitGuide(c.slots.bottom,"bottom",WEATHER.high)};
+    c.texture=textureNote(c.slots.top,c.slots.bottom);
+    // 수정 시 점수 재계산
+    const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
+    if(sc&&!sc.invalid){c.score=sc.total;c.base=sc.base;c.prefBonus=sc.pref;c.grade=sc.grade;c.reasons=sc.reasons;c.invalidReason=null;}
+    else {c.score=null;c.grade="X";c.invalidReason=sc&&sc.reason;c.reasons=[];}
+  });
+  return codis;
+}
+
+function renderToday(){
+  let codis=buildCodis(ITEMS,WEATHER);
+  codis=applyOverrides(codis);
+  CURRENT_CODIS=codis;
+  const note=WEATHER.high>=25?"덥고 습한 날씨라 통기성과 가벼운 핏 위주로 골랐어요.":WEATHER.high>=19?"활동하기 좋은 기온이라 레이어드 여지를 뒀어요.":WEATHER.high>=13?"선선하니 가벼운 아우터가 좋아요.":"쌀쌀하니 아우터를 챙기는 게 좋아요.";
+  const subj=WEATHER.manual?"설정하신 날씨":(WEATHER.date.includes("오늘")||(FORECAST&&WEATHER.date===FORECAST[0].date)?"오늘 서울은":WEATHER.date+" 서울은");
+  let h=renderWeatherPanel();
+  // TPO 패널
+  h+=`<div class="card" style="padding:12px 14px;margin-bottom:16px">
+    <div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;font-weight:600">활동 성격 (TPO)</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="chip ${TPO.move==="transit"?"on":""}" data-move="transit" style="flex:1">🚇 지하철·버스</button>
+      <button class="chip ${TPO.move==="outdoor"?"on":""}" data-move="outdoor" style="flex:1">🚶 실외 활동</button>
+      <button class="chip ${TPO.move==="mixed"?"on":""}" data-move="mixed" style="flex:1">혼합</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" id="tpo-biz" ${TPO.biz?"checked":""}> 비즈니스 캐주얼 변주 (블레이저 추가)</label>
+  </div>`;
+  h+=`<div style="font-size:13.5px;color:var(--sub);margin-bottom:14px;line-height:1.6">${WEATHER.manual?"":esc(subj)} <b style="color:var(--ink)">${esc(WEATHER.cond)} · 최고 ${WEATHER.high}° / 최저 ${WEATHER.low}°</b>${WEATHER.manual?" 기준입니다.":" 입니다."} ${note}</div><div style="display:grid;gap:14px">`;
+
+  codis.forEach((c,idx)=>{
+    const pieces=[["outer",c.slots.outer],["top",c.slots.top],["bottom",c.slots.bottom],["shoe",c.slots.shoe]];
+    h+=`<div class="card" style="padding:16px;border-left:3px solid ${c.accent}">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:800;color:${c.accent}">코디 ${idx+1}</span>
+        <span style="font-size:17px;font-weight:800">${esc(c.title)}</span>
+        ${c.grade&&c.grade!=="X"?`<span title="${esc((c.reasons||[]).join(" · "))}" style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:${c.grade==="A"?"#1f7a4d":c.grade==="B"?"#8a6d1f":"#7a3b1f"};color:#fff">${c.grade} ${c.score}점</span>`:(c.invalidReason?`<span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#5a2a2a;color:#fff" title="${esc(c.invalidReason)}">⚠ ${esc(c.invalidReason)}</span>`:"")}
+        <button class="ghost" data-reroll="${idx}" style="margin-left:auto;padding:4px 10px;font-size:11px;color:var(--sub)">🔀 전체 새로</button></div>
+      <div style="font-size:12.5px;color:var(--sub);margin-bottom:12px">${esc(c.vibe)}</div>
+      <div style="display:grid;gap:7px">`;
+    pieces.forEach(([role,p])=>{
+      if(!p){
+        // 6슬롯 항상 표기: 후보 없으면 추천 대상 없음 (단 hot 날씨 아우터는 '오늘은 불필요')
+        const msg=(role==="outer"&&WEATHER.high>=25)?"오늘 기온엔 불필요":"추천 대상 없음";
+        h+=`<div style="display:flex;align-items:center;gap:10px;opacity:.5">
+          <span class="swatch" style="width:14px;height:14px;background:var(--line)"></span>
+          <span style="font-size:11px;color:var(--sub);width:30px;font-weight:700;flex:0 0 auto">${ROLE_LABEL[role].slice(0,2)}</span>
+          <span style="font-size:12.5px;color:var(--sub);flex:1">${msg}</span>
+          <button class="ghost" data-swap="${idx}:${role}" style="padding:3px 9px;font-size:11px;color:var(--sub);flex:0 0 auto" title="${ROLE_LABEL[role]} 추가">↻</button></div>`;
+        return;
+      }
+      const fitTexts=role==="top"?(c.fit.top||[]):role==="bottom"?(c.fit.bottom||[]):[];
+      h+=`<div style="display:flex;align-items:center;gap:10px">
+        ${p.photo
+          ? `<span style="width:22px;height:22px;border-radius:6px;background:url('${p.photo}') center/cover;border:1px solid var(--line);flex:0 0 auto"></span>`
+          : `<span class="swatch" style="width:14px;height:14px;background:${colorToHex(p.color)}"></span>`}
+        <span style="font-size:11px;color:var(--sub);width:30px;font-weight:700;flex:0 0 auto">${ROLE_LABEL[role].slice(0,2)}</span>
+        <span style="font-size:13.5px;font-weight:600;flex:1;min-width:0">${esc((p.brand?p.brand+" ":"")+p.name)}${p.color?`<span style="font-size:11.5px;color:var(--sub);font-weight:400"> · ${esc(p.color)}</span>`:""}</span>
+        <button class="ghost" data-swap="${idx}:${role}" style="padding:3px 9px;font-size:11px;color:var(--sub);flex:0 0 auto" title="다른 ${ROLE_LABEL[role]}(으)로 교체">↻</button></div>`;
+      fitTexts.forEach(ft=>{h+=`<div style="font-size:11px;color:${c.accent};margin:-2px 0 2px 42px">📐 ${esc(ft)}</div>`;});
+    });
+    // 텍스처 믹스
+    if(c.texture)h+=`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;padding-top:8px;border-top:1px dashed var(--line);line-height:1.5">🧵 ${esc(c.texture)}</div>`;
+    // 액세서리 레이어드
+    if(c.accessories&&c.accessories.length){
+      h+=`<div style="margin-top:4px;padding-top:8px;border-top:1px dashed var(--line)">`;
+      c.accessories.forEach(a=>{
+        const txt=a.placeholder?`<span style="color:var(--sub)">${esc(a.placeholder)}</span>`:`<span style="font-weight:600">${esc((a.brand?a.brand+" ":"")+a.name)}</span>`;
+        h+=`<div style="display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:3px"><span style="width:14px;text-align:center;flex:0 0 auto">⌚</span><span style="width:30px;color:var(--sub);font-weight:700;flex:0 0 auto">소품</span>${txt}</div>`;
+      });
+      h+=`</div>`;
+    }
+    // 가방 (TPO)
+    if(c.bag){
+      const btxt=c.bag.placeholder?`<span style="color:var(--sub)">${esc(c.bag.placeholder)}</span>`:`<span style="font-weight:600">${esc((c.bag.brand?c.bag.brand+" ":"")+c.bag.name)}</span>`;
+      h+=`<div style="display:flex;align-items:center;gap:10px;font-size:12.5px;margin-top:3px"><span style="width:14px;text-align:center;flex:0 0 auto">👜</span><span style="width:30px;color:var(--sub);font-weight:700;flex:0 0 auto">가방</span>${btxt}</div>`;
+    }
+    // 향수 (항상 표기)
+    if(c.perfume)h+=`<div style="display:flex;align-items:center;gap:10px;margin-top:3px"><span style="width:14px;text-align:center;flex:0 0 auto">✦</span><span style="width:30px;color:var(--sub);font-weight:700;flex:0 0 auto;font-size:11px">향수</span><span style="font-size:12.5px;color:var(--sub)">${esc(c.perfume.brand+" "+c.perfume.name)}</span></div>`;
+    else h+=`<div style="display:flex;align-items:center;gap:10px;margin-top:3px;opacity:.5"><span style="width:14px;text-align:center;flex:0 0 auto">✦</span><span style="width:30px;color:var(--sub);font-weight:700;flex:0 0 auto;font-size:11px">향수</span><span style="font-size:12.5px;color:var(--sub)">추천 대상 없음</span></div>`;
+    // 비즈니스 힌트
+    if(c.bizHint)h+=`<div style="font-size:11px;color:var(--sub);margin-top:8px;font-style:italic">💡 ${esc(c.bizHint)}</div>`;
+    h+=`</div></div>`;
+  });
+  h+=`</div>`;
+
+  // 대화형 수정 채팅
+  h+=`<div class="card" style="padding:14px;margin-top:16px">
+    <div style="font-size:12.5px;font-weight:700;margin-bottom:4px">💬 코디 다듬기</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">예: "코디1 신발 바꿔줘" · "더 캐주얼하게" · "비즈니스로" · "지하철" · "롤업 어때"</div>
+    <div id="chat-log" style="display:grid;gap:7px;margin-bottom:10px;max-height:200px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px">
+      <input class="inp" id="chat-in" placeholder="원하는 수정을 말해보세요" style="flex:1">
+      <button class="primary" id="chat-send" style="padding:9px 16px">보내기</button>
+    </div>
+  </div>`;
+
+  view.innerHTML=h;
+  bindWeatherPanel();
+  bindTPO();
+  bindCodiEdits();
+  bindChat();
+  renderChatLog();
+}
+
+function bindTPO(){
+  view.querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",()=>{TPO.move=b.dataset.move;CODI_OVERRIDES={};render();}));
+  const bz=document.getElementById("tpo-biz");
+  if(bz)bz.addEventListener("change",()=>{TPO.biz=bz.checked;CODI_OVERRIDES={};render();});
+}
+
+function bindCodiEdits(){
+  // 슬롯 교체 (다음 아이템으로 순환)
+  view.querySelectorAll("[data-swap]").forEach(b=>b.addEventListener("click",()=>{
+    const [idxs,role]=b.dataset.swap.split(":");const idx=+idxs;
+    const c=CURRENT_CODIS[idx];const cur=c.slots[role];
+    const pool=altPool(role,ITEMS,WEATHER);
+    if(pool.length<2){toast("교체할 다른 "+ROLE_LABEL[role]+"이(가) 없어요");return;}
+    const ci=pool.findIndex(i=>i.code===(cur&&cur.code));
+    const next=pool[(ci+1+pool.length)%pool.length];
+    CODI_OVERRIDES[idx]=CODI_OVERRIDES[idx]||{};CODI_OVERRIDES[idx][role]=next.code;
+    render();
+  }));
+  // 전체 새로 (override 제거 + 시드 흔들기)
+  view.querySelectorAll("[data-reroll]").forEach(b=>b.addEventListener("click",()=>{
+    const idx=+b.dataset.reroll;delete CODI_OVERRIDES[idx];
+    WEATHER={...WEATHER,high:WEATHER.high+ (Math.random()<.5?0.0001:-0.0001)}; // 미세 변화로 pick 시드 흔들기
+    WEATHER.high=Math.round(WEATHER.high);
+    render();
+  }));
+}
+
+// ====== 대화형 수정 (규칙 기반) ======
+let CHAT_LOG=[];
+function renderChatLog(){
+  const el=document.getElementById("chat-log");if(!el)return;
+  el.innerHTML=CHAT_LOG.map(m=>m.role==="user"
+    ? `<div style="align-self:flex-end;background:var(--accent);color:#1a1a1a;padding:7px 11px;border-radius:11px 11px 2px 11px;font-size:12.5px;max-width:85%;margin-left:auto">${esc(m.text)}</div>`
+    : `<div style="align-self:flex-start;background:var(--panel2);color:var(--ink);padding:7px 11px;border-radius:11px 11px 11px 2px;font-size:12.5px;max-width:90%">${esc(m.text)}</div>`
+  ).join("");
+  el.scrollTop=el.scrollHeight;
+}
+function chatSay(text){CHAT_LOG.push({role:"bot",text});renderChatLog();}
+function toast(text){chatSay(text);}
+
+function bindChat(){
+  const inp=document.getElementById("chat-in"),send=document.getElementById("chat-send");
+  if(!inp)return;
+  const go=()=>{const t=inp.value.trim();if(!t)return;CHAT_LOG.push({role:"user",text:t});inp.value="";handleChat(t);};
+  send.addEventListener("click",go);
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+}
+
+function targetCodiIdx(text){
+  const m=text.match(/코디\s*([123])/);if(m)return +m[1]-1;
+  return 0; // 기본 코디1
+}
+function handleChat(text){
+  const t=text.replace(/\s/g,"");
+  const idx=targetCodiIdx(text);
+  // TPO 변경
+  if(/지하철|버스|대중교통|transit/i.test(t)){TPO.move="transit";CODI_OVERRIDES={};chatSay("지하철·버스 이동에 맞춰 거치적거림 적은 가방과 편한 신발 위주로 바꿨어요.");render();return;}
+  if(/실외|야외|아웃도어|걷|outdoor/i.test(t)){TPO.move="outdoor";CODI_OVERRIDES={};chatSay("실외 활동에 맞춰 쿠셔닝 좋은 신발과 수납 가방으로 조정했어요.");render();return;}
+  if(/비즈니스|회사|출근|격식|블레이저|biz/i.test(t)){TPO.biz=true;CODI_OVERRIDES={};chatSay("코디2를 비즈니스 캐주얼로 바꿨어요. 블레이저와 드레스 슈즈를 더했어요.");render();return;}
+  if(/캐주얼하게|편하게|가볍게|더캐주얼/i.test(t)){TPO.biz=false;TPO.move="mixed";CODI_OVERRIDES={};chatSay("더 편안한 캐주얼 톤으로 풀었어요.");render();return;}
+  // 슬롯 교체
+  const roleMap=[["shoe",/신발|운동화|슈즈|스니커|로퍼|구두/],["bottom",/하의|바지|팬츠|데님|청바지|진|슬랙스/],["top",/상의|티|셔츠|니트|탑/],["outer",/아우터|자켓|코트|블루종|점퍼/]];
+  for(const [role,re] of roleMap){
+    if(re.test(t)){
+      const c=CURRENT_CODIS[idx];const cur=c.slots[role];const pool=altPool(role,ITEMS,WEATHER);
+      if(pool.length<2){chatSay("교체할 다른 "+ROLE_LABEL[role]+"이(가) 옷장에 부족해요.");return;}
+      const ci=pool.findIndex(i=>i.code===(cur&&cur.code));const next=pool[(ci+1+pool.length)%pool.length];
+      CODI_OVERRIDES[idx]=CODI_OVERRIDES[idx]||{};CODI_OVERRIDES[idx][role]=next.code;
+      chatSay(`코디${idx+1}의 ${ROLE_LABEL[role]}을(를) ${next.brand?next.brand+" ":""}${next.name}(으)로 바꿨어요.`);render();return;
+    }
+  }
+  // 롤업/턱인 안내
+  if(/롤업|걷어|기장/.test(t)){chatSay("28도 안팎이면 밑단 1~2회 롤업으로 발목을 드러내면 시각적으로 시원해요. 데님·치노에 특히 잘 어울려요.");return;}
+  if(/턱인|넣어|tuck/i.test(t)){chatSay("셔츠·폴로는 앞만 살짝 넣는 '프렌치 턱'이 비율에 유리하고, 오버핏 티는 빼서 입는 편이 자연스러워요.");return;}
+  if(/새로|다시|바꿔만|랜덤/.test(t)){CODI_OVERRIDES={};render();chatSay("세 코디를 다시 뽑았어요.");return;}
+  // 도움말
+  chatSay('이렇게 말해보세요: "코디1 신발 바꿔줘", "더 캐주얼하게", "비즈니스로", "지하철 많이 타", "롤업 어때"');
+}
+
+function bindWeatherPanel(){
+  // 날짜 칩
+  view.querySelectorAll("[data-date]").forEach(b=>b.addEventListener("click",()=>{
+    SELECTED_DATE=b.dataset.date; MANUAL=null; applyWeather();
+  }));
+  // 수동 토글
+  const mt=document.getElementById("w-manual");
+  if(mt)mt.addEventListener("change",()=>{
+    if(mt.checked){
+      const base=(FORECAST&&(FORECAST.find(x=>x.date===SELECTED_DATE)||FORECAST[0]))||{high:WEATHER.high,low:WEATHER.low};
+      MANUAL={high:base.high,low:base.low,cond:condText(base.code!=null?base.code:0)||"맑음",rain:false};
+      // cond/ rain 초기값 보정
+      if(!COND_OPTIONS.some(([c])=>c===MANUAL.cond))MANUAL.cond="맑음";
+      MANUAL.rain=(COND_OPTIONS.find(([c])=>c===MANUAL.cond)||[,false])[1];
+    }else{MANUAL=null;}
+    applyWeather();
+  });
+  // 수동 기온
+  const wh=document.getElementById("w-high"),wl=document.getElementById("w-low");
+  if(wh){wh.addEventListener("input",()=>{MANUAL.high=+wh.value;applyWeatherKeepPanel();});wh.addEventListener("change",()=>{MANUAL.high=+wh.value;applyWeather();});}
+  if(wl){wl.addEventListener("input",()=>{MANUAL.low=+wl.value;applyWeatherKeepPanel();});wl.addEventListener("change",()=>{MANUAL.low=+wl.value;applyWeather();});}
+  // 수동 날씨
+  view.querySelectorAll("[data-cond]").forEach(b=>b.addEventListener("click",()=>{
+    MANUAL.cond=b.dataset.cond;
+    MANUAL.rain=(COND_OPTIONS.find(([c])=>c===b.dataset.cond)||[,false])[1];
+    applyWeather();
+  }));
+}
+// 기온 입력 중 포커스 유지를 위해 코디만 갱신
+function applyWeatherKeepPanel(){
+  if(MANUAL)WEATHER={...WEATHER,high:MANUAL.high,low:MANUAL.low};
+  renderWeather();
+}
+
+function renderCloset(){
+  const c=counts(),f=window._catFilter||"ALL";
+  const list=f==="ALL"?ITEMS:ITEMS.filter(i=>i.cat===f);
+  let h=`<div style="display:flex;gap:8px;margin-bottom:8px">
+    <button class="ghost" id="csv-export" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">⬇ CSV 내보내기</button>
+    <button class="ghost" id="csv-import" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">⬆ CSV 가져오기</button>
+    <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:6px">
+    <button class="ghost" id="bk-export" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">💾 전체 백업 (사진 포함)</button>
+    <button class="ghost" id="bk-import" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">↩ 백업 복원</button>
+    <input type="file" id="bk-file" accept=".json,application/json" style="display:none">
+  </div>
+  <div style="font-size:10.5px;color:var(--sub);margin-bottom:14px;line-height:1.4">CSV는 텍스트만(엑셀 호환) · 전체 백업은 사진까지 포함한 완전 복사본(JSON)</div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px">
+    <button class="chip ${f==="ALL"?"on":""}" data-cf="ALL">전체 ${ITEMS.length}</button>`;
+  Object.entries(CATEGORIES).forEach(([k,l])=>{if(c[k]>0)h+=`<button class="chip ${f===k?"on":""}" data-cf="${k}">${l} ${c[k]}</button>`;});
+  h+=`</div><div style="display:grid;gap:7px">`;
+  list.forEach(i=>{h+=`<div class="card" data-edit="${i.code}" style="padding:11px 13px;display:flex;align-items:center;gap:11px;cursor:pointer">
+    ${i.photo
+      ? `<span style="width:34px;height:34px;border-radius:8px;background:url('${i.photo}') center/cover;border:1px solid var(--line);flex:0 0 auto"></span>`
+      : `<span class="swatch" style="width:34px;height:34px;border-radius:8px;background:${colorToHex(i.color)};display:flex;align-items:center;justify-content:center;font-size:10px;color:#0008">${CATEGORIES[i.cat].slice(0,1)}</span>`}
+    <span style="font-size:10.5px;font-weight:800;color:var(--accent);width:42px;flex:0 0 auto">${i.code}</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((i.brand?i.brand+" ":"")+i.name)}</div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:1px">${esc([i.size,i.color,i.material,i.fit].filter(Boolean).join(" · "))}</div></div>
+    <button data-del="${i.code}" style="background:transparent;color:var(--sub);font-size:17px;line-height:1;padding:2px 6px;border-radius:6px;flex:0 0 auto">×</button></div>`;});
+  h+=`</div>`;
+  view.innerHTML=h;
+  document.getElementById("csv-export").addEventListener("click",exportCSV);
+  const fileInput=document.getElementById("csv-file");
+  document.getElementById("csv-import").addEventListener("click",()=>fileInput.click());
+  fileInput.addEventListener("change",e=>{const file=e.target.files[0];if(file)handleCSVFile(file);e.target.value="";});
+  document.getElementById("bk-export").addEventListener("click",exportBackup);
+  const bkInput=document.getElementById("bk-file");
+  document.getElementById("bk-import").addEventListener("click",()=>bkInput.click());
+  bkInput.addEventListener("change",e=>{const file=e.target.files[0];if(file)handleBackupFile(file);e.target.value="";});
+}
+
+// ====== 전체 백업 (JSON, 사진 포함) ======
+function exportBackup(){
+  const payload={app:"codi-wardrobe",version:1,exportedAt:new Date().toISOString(),count:ITEMS.length,items:ITEMS};
+  const blob=new Blob([JSON.stringify(payload)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="codi-백업-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+function handleBackupFile(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    let data;
+    try{data=JSON.parse(reader.result);}catch(e){alert("백업 파일을 읽지 못했어요. 올바른 JSON 백업 파일인지 확인해주세요.");return;}
+    const arr=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:null);
+    if(!arr){alert("이 파일에서 옷장 데이터를 찾지 못했어요.");return;}
+    const valid=arr.filter(i=>i&&i.name);
+    if(!valid.length){alert("복원할 항목이 없어요.");return;}
+    const photoN=valid.filter(i=>i.photo).length;
+    if(!confirm(`백업 복원: ${valid.length}벌${photoN?` (사진 ${photoN}장 포함)`:""}\n\n현재 옷장을 이 백업으로 전체 교체합니다. 계속할까요?`))return;
+    ITEMS=valid.map(i=>({...i,cat:CATEGORIES[i.cat]?i.cat:"UN"}));
+    if(save(ITEMS)){
+      window._catFilter="ALL";renderWeather();render();
+      alert("복원 완료 · 현재 "+ITEMS.length+"벌");
+    }
+  };
+  reader.readAsText(file,"utf-8");
+}
+
+// ====== CSV 입출력 ======
+const CSV_FIELDS=["code","cat","brand","name","size","color","pattern","fit","material","price","date","note"];
+const CSV_HEADERS=["품목코드","카테고리","브랜드","모델명","사이즈","색상","패턴","핏","소재","가격","구매일","비고"];
+
+function csvCell(v){v=(v==null?"":String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function exportCSV(){
+  const rows=[CSV_HEADERS.join(",")];
+  ITEMS.forEach(i=>rows.push(CSV_FIELDS.map(f=>csvCell(i[f])).join(",")));
+  const csv="\uFEFF"+rows.join("\r\n"); // BOM for Excel 한글
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="codi-옷장-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+// 헤더 한글/영문 모두 인식
+const HEADER_MAP={};
+CSV_HEADERS.forEach((h,idx)=>HEADER_MAP[h]=CSV_FIELDS[idx]);
+CSV_FIELDS.forEach(f=>HEADER_MAP[f]=f);
+
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,"");
+  const rows=[];let row=[],cur="",q=false;
+  for(let i=0;i<text.length;i++){const ch=text[i];
+    if(q){if(ch=='"'){if(text[i+1]=='"'){cur+='"';i++;}else q=false;}else cur+=ch;}
+    else{if(ch=='"')q=true;
+      else if(ch==","){row.push(cur);cur="";}
+      else if(ch=="\n"){row.push(cur);rows.push(row);row=[];cur="";}
+      else if(ch=="\r"){}
+      else cur+=ch;}}
+  if(cur.length||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(r=>r.some(c=>c.trim()!==""));
+}
+
+function handleCSVFile(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const rows=parseCSV(reader.result);
+      if(rows.length<2){alert("데이터 행이 없어요. 첫 줄은 헤더, 둘째 줄부터 항목이어야 합니다.");return;}
+      const head=rows[0].map(h=>h.trim());
+      const fieldByCol=head.map(h=>HEADER_MAP[h]||null);
+      const parsed=[];
+      for(let r=1;r<rows.length;r++){
+        const obj={};
+        rows[r].forEach((val,c)=>{const f=fieldByCol[c];if(f)obj[f]=val.trim();});
+        if(!obj.name)continue;
+        if(!obj.cat||!CATEGORIES[obj.cat])obj.cat="UN";
+        parsed.push(obj);
+      }
+      if(!parsed.length){alert("인식된 항목이 없어요. '모델명'(name) 열이 있는지 확인해주세요.");return;}
+      openImportModal(parsed);
+    }catch(e){alert("CSV를 읽는 중 문제가 생겼어요: "+e.message);}
+  };
+  reader.readAsText(file,"utf-8");
+}
+
+function openImportModal(parsed){
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px";
+  ov.innerHTML=`<div class="card" style="padding:22px;max-width:380px;width:100%">
+    <div style="font-size:17px;font-weight:800;margin-bottom:6px">CSV 가져오기</div>
+    <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:18px"><b style="color:var(--ink)">${parsed.length}개</b> 항목을 읽었어요. 어떻게 반영할까요?</div>
+    <div style="display:grid;gap:9px">
+      <button class="primary" data-mode="merge" style="text-align:left;padding:13px">기존 목록에 추가 (병합)<div style="font-size:11px;font-weight:500;color:#1a1a1a;opacity:.7;margin-top:2px">같은 품목코드는 새 내용으로 덮어씀</div></button>
+      <button class="ghost" data-mode="replace" style="text-align:left;padding:13px;color:var(--ink)">전체 교체 (덮어쓰기)<div style="font-size:11px;font-weight:500;color:var(--sub);margin-top:2px">현재 옷장을 지우고 이 파일로 교체</div></button>
+      <button class="ghost" data-mode="cancel" style="padding:11px">취소</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click",e=>{
+    if(e.target===ov){ov.remove();return;}
+    const btn=e.target.closest("[data-mode]");if(!btn)return;
+    const mode=btn.dataset.mode;
+    if(mode==="cancel"){ov.remove();return;}
+    applyImport(parsed,mode);
+    ov.remove();
+  });
+}
+
+function applyImport(parsed,mode){
+  // 코드 없는 항목은 카테고리별 다음 코드 자동 부여
+  if(mode==="replace"){
+    const used={};
+    ITEMS=[];
+    parsed.forEach(p=>{
+      if(!p.code){const cat=p.cat;used[cat]=(used[cat]||0)+1;p.code=cat+String(used[cat]).padStart(3,"0");}
+    });
+    ITEMS=parsed.slice();
+  }else{ // merge
+    parsed.forEach(p=>{
+      if(p.code){
+        const idx=ITEMS.findIndex(i=>i.code===p.code);
+        if(idx>=0)ITEMS[idx]={...ITEMS[idx],...p};
+        else ITEMS.push(p);
+      }else{
+        p.code=nextCode(p.cat);ITEMS.push(p);
+      }
+    });
+  }
+  save(ITEMS);
+  window._catFilter="ALL";
+  renderWeather();render();
+  alert((mode==="replace"?"전체 교체":"병합")+" 완료 · 현재 "+ITEMS.length+"벌");
+}
+
+function renderAdd(){
+  const editing=!!window._editCode;
+  const d=window._draft||(window._draft={cat:"TP",brand:"",name:"",size:"",color:"",material:"",note:"",photo:""});
+  if(d.photo===undefined)d.photo="";
+  const codeLine=editing
+    ? `수정 중: <b style="color:var(--accent)">${window._editCode}</b>`
+    : `다음 코드: <b style="color:var(--accent)" id="nc">${nextCode(d.cat)}</b>`;
+  view.innerHTML=`<div class="card" style="padding:18px;max-width:460px">
+    <div style="font-size:16px;font-weight:800;margin-bottom:3px">${editing?"아이템 수정":"새 아이템 추가"}</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:16px">${codeLine}</div>
+    <div style="display:grid;gap:11px">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div id="d-photo-box" style="width:84px;height:84px;border-radius:11px;border:1px dashed var(--line);background:var(--bg) center/cover no-repeat;flex:0 0 auto;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;${d.photo?`background-image:url('${d.photo}');border-style:solid`:""}">
+          ${d.photo?"":'<span style="font-size:11px;color:var(--sub);text-align:center;line-height:1.4">📷<br>사진</span>'}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px">제품 사진 (선택)</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="ghost" id="d-photo-pick" style="padding:7px 12px;font-size:12px;color:var(--ink)">사진 선택</button>
+            ${d.photo?`<button class="ghost" id="d-photo-clear" style="padding:7px 12px;font-size:12px;color:var(--sub)">사진 삭제</button>`:""}
+          </div>
+          <div style="font-size:10.5px;color:var(--sub);margin-top:6px;line-height:1.4">자동으로 작게 압축돼 저장됩니다</div>
+          <input type="file" id="d-photo-file" accept="image/*" style="display:none">
+        </div>
+      </div>
+      <label class="f">카테고리<select class="inp" id="d-cat">${Object.entries(CATEGORIES).map(([k,v])=>`<option value="${k}" ${k===d.cat?"selected":""}>${v} (${k})</option>`).join("")}</select></label>
+      <div style="display:flex;gap:10px">
+        <label class="f" style="flex:1">브랜드<input class="inp" id="d-brand" value="${esc(d.brand)}" placeholder="Levi's"></label>
+        <label class="f" style="flex:1">사이즈<input class="inp" id="d-size" value="${esc(d.size)}" placeholder="L / 32x30"></label></div>
+      <label class="f">모델명 *<input class="inp" id="d-name" value="${esc(d.name)}" placeholder="501 오리지널 진"></label>
+      <div style="display:flex;gap:10px">
+        <label class="f" style="flex:1">색상<input class="inp" id="d-color" value="${esc(d.color)}" placeholder="인디고"></label>
+        <label class="f" style="flex:1">소재<input class="inp" id="d-material" value="${esc(d.material)}" placeholder="데님"></label></div>
+      <label class="f">비고<input class="inp" id="d-note" value="${esc(d.note)}" placeholder="메모"></label>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="primary" id="d-save" style="flex:1">${editing?"수정 저장":"옷장에 추가"}</button>
+      <button class="ghost" id="d-cancel">취소</button></div></div>`;
+  const sync=()=>{d.cat=val("d-cat");d.brand=val("d-brand");d.name=val("d-name");d.size=val("d-size");d.color=val("d-color");d.material=val("d-material");d.note=val("d-note");if(!editing)document.getElementById("nc").textContent=nextCode(d.cat);};
+  ["d-cat","d-brand","d-name","d-size","d-color","d-material","d-note"].forEach(id=>document.getElementById(id).addEventListener("input",sync));
+  // 사진 처리
+  const pf=document.getElementById("d-photo-file");
+  document.getElementById("d-photo-pick").addEventListener("click",()=>pf.click());
+  pf.addEventListener("change",e=>{const file=e.target.files[0];if(file)resizePhoto(file,dataUrl=>{d.photo=dataUrl;sync();renderAdd();});e.target.value="";});
+  const clr=document.getElementById("d-photo-clear");
+  if(clr)clr.addEventListener("click",()=>{d.photo="";sync();renderAdd();});
+  // 저장
+  document.getElementById("d-save").addEventListener("click",()=>{
+    sync();if(!d.name.trim())return;
+    if(editing){
+      const idx=ITEMS.findIndex(i=>i.code===window._editCode);
+      if(idx>=0)ITEMS[idx]={...ITEMS[idx],...d,code:window._editCode};
+      window._catFilter=d.cat;
+    }else{
+      ITEMS.push({...d,code:nextCode(d.cat)});window._catFilter=d.cat;
+    }
+    save(ITEMS);window._draft=null;window._editCode=null;currentTab="closet";setTab();renderWeather();render();
+  });
+  document.getElementById("d-cancel").addEventListener("click",()=>{window._draft=null;window._editCode=null;currentTab="closet";setTab();render();});
+}
+function val(id){return document.getElementById(id).value;}
+
+// 사진 리사이즈 (가로 최대 800px, JPEG 압축)
+function resizePhoto(file,cb){
+  const img=new Image();
+  const fr=new FileReader();
+  fr.onload=()=>{img.onload=()=>{
+    const max=800,scale=Math.min(1,max/img.width);
+    const w=Math.round(img.width*scale),hh=Math.round(img.height*scale);
+    const cv=document.createElement("canvas");cv.width=w;cv.height=hh;
+    cv.getContext("2d").drawImage(img,0,0,w,hh);
+    try{cb(cv.toDataURL("image/jpeg",0.72));}catch(e){alert("이미지를 처리하지 못했어요.");}
+  };img.onerror=()=>alert("이미지를 읽지 못했어요.");img.src=fr.result;};
+  fr.readAsDataURL(file);
+}
+
+function startEdit(code){
+  const it=ITEMS.find(i=>i.code===code);if(!it)return;
+  window._editCode=code;
+  window._draft={cat:it.cat,brand:it.brand||"",name:it.name||"",size:it.size||"",color:it.color||"",material:it.material||"",note:it.note||"",photo:it.photo||"",pattern:it.pattern||"",fit:it.fit||"",price:it.price||"",date:it.date||""};
+  currentTab="add";setTab();render();
+}
+
+// ====== 이벤트 ======
+function setTab(){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===currentTab));}
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
+  if(b.dataset.tab==="add"){window._editCode=null;window._draft=null;}
+  currentTab=b.dataset.tab;setTab();render();
+}));
+view.addEventListener("click",e=>{
+  const cf=e.target.closest("[data-cf]"); if(cf){window._catFilter=cf.dataset.cf;render();return;}
+  const del=e.target.closest("[data-del]"); if(del){e.stopPropagation();const it=ITEMS.find(i=>i.code===del.dataset.del);if(confirm((it?it.name:"이 항목")+" 을(를) 삭제할까요?")){ITEMS=ITEMS.filter(i=>i.code!==del.dataset.del);save(ITEMS);renderWeather();render();}return;}
+  const ed=e.target.closest("[data-edit]"); if(ed){startEdit(ed.dataset.edit);return;}
+});
+document.getElementById("wbadge").addEventListener("click",()=>{
+  MANUAL=null; SELECTED_DATE=FORECAST?FORECAST[0].date:null; WEATHER.loading=true; renderWeather();
+  if(FORECAST){applyWeather();}else{fetchWeather();}
+});
+
+// ====== 시작 ======
+renderWeather(); render(); fetchWeather();
+</script>
+</body>
+</html>

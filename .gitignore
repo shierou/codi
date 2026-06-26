@@ -1,0 +1,17 @@
+# 개인정보·DB·이메일
+codi.db
+*.eml
+*.xlsx
+
+# 백엔드 소스 (배포 불필요)
+src/
+data/
+frontend/
+scripts/
+tests/
+requirements.txt
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
+node_modules/
