@@ -303,7 +303,6 @@ function outerFit(base,outer){
 function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
 // TPO 상태 (전역) — 사용자가 오늘 코디 탭에서 토글
 let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
-let REROLL=[0,0,0]; // 코디별 새로고침 시드 (전체 새로 버튼)
 
 function fitGuide(item,role,t){
   // 기장/턱인 가이드 — 기온과 아이템 성격 반영
@@ -357,22 +356,6 @@ function buildCodis(items,w){
   const blazers=outers.filter(i=>/블레이저|blazer/i.test((i.name||"")));
   const smartOuter=outers.filter(i=>/해링턴|윈드|블레이저|blazer/i.test(i.name||""));
 
-  // ===== 상황(TPO)별 후보 풀 =====
-  // 셔츠/니트/폴로 등 단정한 상의 (티셔츠 제외, 헤비니트 제외, 더운 날엔 니트 제외)
-  const isDressTop=i=>{const n=i.name||"";return (/셔츠|폴로|옥스포드/.test(n)&&!/티셔츠|t셔츠/i.test(n))&&!isHeavy(i);};
-  const smartTops=tops.filter(isDressTop).concat(
-    band!=="hot"?tops.filter(i=>/니트/.test(i.name||"")&&!isHeavy(i)):[]
-  ).filter((v,idx,a)=>a.indexOf(v)===idx);
-  // 깔끔한 신발(로퍼·구두·미니멀 스니커즈)
-  const cleanShoes=shoes.filter(i=>/스탠 스미스|stan|삼바|samba|로퍼|구두|더비|996|992|990|998|2002/i.test(i.name||""));
-  // 데님 중 다크 인디고 우선
-  const darkDenim=denim.filter(i=>/다크인디고|다크 인디고/.test(i.color||"")||(/인디고/.test(i.color||"")&&valueOf(i)==="DARK"));
-  // 업무용 하의(슬랙스·치노·다크 데님, 와이드·릴렉스 제외)
-  const notWide=i=>!/와이드|릴렉스|loose|wide|relax|550|555|568/i.test((i.fit||"")+(i.name||""));
-  const workBottoms=chinos.concat(darkDenim).filter((v,idx,a)=>a.indexOf(v)===idx).filter(notWide);
-  // 캐주얼 상의(그래픽·반팔·오버)
-  const freeTops=wantTops.filter(i=>/그래픽|오버|반팔|tee|릴렉스/i.test((i.name||"")+(i.note||"")+(i.fit||"")));
-
   // TPO에 따른 신발/가방 선호
   function shoeForTPO(baseList,seed){
     if(TPO.move==="outdoor"){const flat=baseList.filter(i=>/860|1080|fresh|fuelcell|노바|슈퍼|2002|990|993|996/i.test(i.name||""));return pick(flat.length?flat:baseList,seed);}
@@ -400,76 +383,70 @@ function buildCodis(items,w){
 
   const R=[];
 
-  // 1 업무 (스마트 캐주얼 ~ 비즈니스)
+  // 1 캐주얼 시티보이 (+텍스처 믹스)
   {
-    const s=t+REROLL[0];
-    const top=pick(smartTops.length?smartTops:wantTops,s);
-    const bottom=pick(workBottoms.length?workBottoms:(chinos.length?chinos:bottoms),s+1);
-    const wShoes=cleanShoes.length?cleanShoes:(dressShoes.length?dressShoes:sneakers);
-    const shoe=shoeForTPO(wShoes.length?wShoes:shoes,s+2);
-    const wOuter=(blazers[0]||smartOuter[0]||(band!=="hot"?pick(wantOuter,s+3):null))||null;
-    R.push({title:"업무",vibe:"단정한 스마트 캐주얼 · 출근·미팅",accent:"#4a5a7a",style:"biz",
-      slots:{outer:band==="hot"?null:wOuter,top,bottom,shoe},
-      perfume:pick(perfumes.filter(p=>/우드|세이지|페어|wood|sage/i.test((p.name||"")+(p.brand||""))).length?perfumes.filter(p=>/우드|세이지|페어|wood|sage/i.test((p.name||"")+(p.brand||""))):perfumes,s),
-      accessories:accessoryLayer("biz"),
+    const top=pick(casualTops.length?casualTops:wantTops,t);
+    const bottom=pick(denim.length?denim:bottoms,t+1);
+    const shoe=shoeForTPO(sneakers.length?sneakers:shoes,t+2);
+    R.push({title:"캐주얼 시티보이",vibe:"가볍고 세련된 도심 캐주얼",accent:"#3b6ea5",style:"casual",
+      slots:{outer:band!=="hot"?pick(wantOuter,t+3):null,top,bottom,shoe},
+      perfume:pick(perfumes,t),
+      accessories:accessoryLayer("casual"),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
       fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
   }
 
-  // 2 데이트 (단정하면서 멋낸 스마트 캐주얼)
+  // 2 미니멀 클린 (+액세서리 레이어드, +비즈니스 변주)
   {
-    const s=t+REROLL[1];
-    // 데이트: 깔끔한 셔츠·니트 + 다크 인디고 데님 우선 + 가죽/미니멀 스니커즈
-    const dTops=tops.filter(i=>(/셔츠|폴로/.test(i.name||"")&&!/티셔츠|t셔츠/i.test(i.name||""))&&!isHeavy(i)).concat(
-      band!=="hot"?tops.filter(i=>/니트/.test(i.name||"")&&!isHeavy(i)):[]
-    ).filter((v,idx,a)=>a.indexOf(v)===idx);
-    const dBottoms=(darkDenim.length?darkDenim:denim).filter(notWide);
-    const dBottomsF=dBottoms.length?dBottoms:(denim.length?denim:bottoms);
-    const dShoes=cleanShoes.length?cleanShoes:sneakers;
-    const top=pick(dTops.length?dTops:wantTops,s+4);
-    const bottom=pick(dBottomsF,s+5);
-    const shoe=shoeForTPO(dShoes.length?dShoes:shoes,s+6);
-    // 데이트 향수: 우디·플로럴 계열 우선
-    const dPerf=perfumes.filter(p=>/우드|플라워|피오니|가이악|레이지|wood|flower|peony/i.test((p.name||"")+(p.brand||"")));
-    R.push({title:"데이트",vibe:"단정하면서 멋낸 스마트 캐주얼",accent:"#7a4a6b",style:"minimal",
-      slots:{outer:band!=="hot"?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,top,bottom,shoe},
-      perfume:pick(dPerf.length?dPerf:perfumes,s+1),
-      accessories:accessoryLayer("minimal"),
+    const minT=wantTops.filter(i=>/솔리드|화이트|니트|셔츠|폴로|심리스/.test((i.pattern||"")+(i.color||"")+(i.name||"")));
+    const cleanS=shoes.filter(i=>/스탠 스미스|삼바|로퍼|996|992|990|998/.test(i.name||""));
+    const top=pick(minT.length?minT:wantTops,t+4);
+    const bottom=pick(chinos.length?chinos:bottoms,t+5);
+    const shoe=TPO.biz?(pick(dressShoes.length?dressShoes:cleanS,t+6)):shoeForTPO(cleanS.length?cleanS:shoes,t+6);
+    const blazer=TPO.biz?(blazers[0]||smartOuter[0]||null):null;
+    R.push({title:TPO.biz?"비즈니스 캐주얼":"미니멀 클린",vibe:TPO.biz?(blazers.length?"블레이저 한 겹으로 격을 올린 룩":"깔끔한 아우터로 격식을 더한 룩"):"조용한 럭셔리 · 단정한 무드",accent:"#6b7152",style:TPO.biz?"biz":"minimal",
+      slots:{outer:blazer||(band!=="hot"?pick(wantOuter,t+7):null),top,bottom,shoe},
+      perfume:pick(perfumes,t+1),
+      accessories:accessoryLayer(TPO.biz?"biz":"minimal"),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
-      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
+      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)},
+      bizHint:!TPO.biz?(blazers.length?"위 TPO에서 '비즈니스'를 켜면 블레이저를 더해드려요":"블레이저를 옷장에 추가하면 더 완성도 있는 비즈니스 변주가 가능해요"):(!blazers.length?"블레이저가 없어 깔끔한 아우터로 대체했어요":null)});
   }
 
-  // 3 자유 (편한 캐주얼 · 비 오면 방수 우선)
+  // 3 날씨 기능성
   {
-    let vibe,accent,slots;
-    const s=t+REROLL[2];
+    let title,vibe,accent,slots,style="func";
     if(rain){
       const ws=shoes.filter(i=>/방수|gtx|고어|ecco/i.test((i.note||"")+(i.brand||"")));
-      const top=pick(freeTops.length?freeTops:wantTops,s+8),bottom=pick(bottoms.filter(i=>/다크|블랙|네이비|인디고/.test(i.color||"")),s)||pick(denim.length?denim:bottoms,s+9);
-      vibe="비 오는 날 발 안 젖는 편한 캐주얼";accent="#c97b4a";
-      slots={outer:pick(outers.filter(i=>/윈드|폴리|블루종/.test((i.name||"")+(i.material||""))),s)||pick(outers,s),top,bottom,shoe:pick(ws.length?ws:sneakers,s)};
+      const top=pick(wantTops,t+8),bottom=pick(bottoms.filter(i=>/다크|블랙|네이비|인디고/.test(i.color||"")),t)||pick(bottoms,t+9);
+      title="우천 대응";vibe="비 오는 날 발 안 젖는 조합";accent="#34507a";
+      slots={outer:pick(outers.filter(i=>/윈드|폴리|블루종/.test((i.name||"")+(i.material||""))),t)||pick(outers,t),top,bottom,shoe:pick(ws.length?ws:sneakers,t)};
+    }else if(band==="hot"){
+      const top=pick(wantTops.filter(i=>/에어리즘|반팔|오버|tee/i.test((i.name||"")+(i.note||""))),t)||pick(wantTops,t);
+      const bottom=pick(denim.concat(chinos),t+10);
+      title="쿨 & 통기성";vibe="덥고 습한 날 쾌적 우선";accent="#c97b4a";
+      slots={outer:null,top,bottom,shoe:shoeForTPO(sneakers,t+11)};
     }else{
-      const top=pick(freeTops.length?freeTops:wantTops,s+8);
-      const bottom=pick(denim.length?denim:bottoms,s+9);
-      vibe="편하고 가벼운 데일리 캐주얼";accent="#c97b4a";
-      slots={outer:band!=="hot"?pick(wantOuter,s+12):null,top,bottom,shoe:shoeForTPO(sneakers.length?sneakers:shoes,s+11)};
+      const perf=shoes.filter(i=>/860|1080|fresh foam|fuelcell|노바|슈퍼블라스트/i.test(i.name||""));
+      const top=pick(wantTops,t+8),bottom=pick(bottoms,t+9);
+      title="날씨 기능성";vibe="편안한 기능성 데일리";accent="#c97b4a";
+      slots={outer:band!=="hot"?pick(wantOuter,t+12):null,top,bottom,shoe:pick(perf.length?perf:sneakers,t)};
     }
-    R.push({title:"자유",vibe,accent,style:"casual",slots,perfume:pick(perfumes,s+2),
+    R.push({title,vibe,accent,style,slots,perfume:pick(perfumes,t+2),
       accessories:accessoryLayer("casual"),bag:bagSuggest(),
       texture:textureNote(slots.top,slots.bottom),
       fit:{top:fitGuide(slots.top,"top",t),bottom:fitGuide(slots.bottom,"bottom",t)}});
   }
-  // 각 코디에 원본 슬롯 번호 부여 (REROLL 인덱스 추적용)
-  R.forEach((c,i)=>{c.origin=i;});
   // v3 점수화: 각 코디에 점수·등급·근거 부여
   R.forEach(c=>{
     const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
     if(sc&&!sc.invalid){c.score=sc.total;c.base=sc.base;c.prefBonus=sc.pref;c.grade=sc.grade;c.reasons=sc.reasons;}
     else {c.score=null;c.grade=sc?"X":null;c.invalidReason=sc&&sc.reason;c.reasons=[];}
   });
-  // 상황(업무·데이트·자유) 고정 순서 유지 — 정렬하지 않음. 점수는 배지로만 표시.
+  // 무효 코디도 3코디 UX 유지를 위해 후순위로만 내리고, 점수 내림차순 정렬
+  R.sort((a,b)=>(b.score==null?-1:b.score)-(a.score==null?-1:a.score));
   return R;
 }
 
@@ -532,8 +509,6 @@ function condText(c){
 
 // ====== 렌더 ======
 let currentTab="today";
-// 옷장 필터/검색/보기 상태
-let CLOSET={cat:"ALL",brand:"ALL",color:"ALL",use:"ALL",q:"",view:"card"};
 const view=document.getElementById("view");
 function esc(s){return(s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
 
@@ -608,9 +583,8 @@ let CURRENT_CODIS=[];
 const ROLE_LABEL={outer:"아우터",top:"상의",bottom:"하의",shoe:"신발"};
 
 function applyOverrides(codis){
-  codis.forEach((c)=>{
-    const key=typeof c.origin==="number"?c.origin:codis.indexOf(c);
-    const ov=CODI_OVERRIDES[key];if(!ov)return;
+  codis.forEach((c,idx)=>{
+    const ov=CODI_OVERRIDES[idx];if(!ov)return;
     Object.keys(ov).forEach(role=>{
       const it=ITEMS.find(i=>i.code===ov[role]);
       if(it)c.slots[role]=it;
@@ -732,21 +706,18 @@ function bindCodiEdits(){
   view.querySelectorAll("[data-swap]").forEach(b=>b.addEventListener("click",()=>{
     const [idxs,role]=b.dataset.swap.split(":");const idx=+idxs;
     const c=CURRENT_CODIS[idx];const cur=c.slots[role];
-    const origin=c&&typeof c.origin==="number"?c.origin:idx;
     const pool=altPool(role,ITEMS,WEATHER);
     if(pool.length<2){toast("교체할 다른 "+ROLE_LABEL[role]+"이(가) 없어요");return;}
     const ci=pool.findIndex(i=>i.code===(cur&&cur.code));
     const next=pool[(ci+1+pool.length)%pool.length];
-    CODI_OVERRIDES[origin]=CODI_OVERRIDES[origin]||{};CODI_OVERRIDES[origin][role]=next.code;
+    CODI_OVERRIDES[idx]=CODI_OVERRIDES[idx]||{};CODI_OVERRIDES[idx][role]=next.code;
     render();
   }));
-  // 전체 새로 (해당 코디 시드를 흔들어 새 조합 생성)
+  // 전체 새로 (override 제거 + 시드 흔들기)
   view.querySelectorAll("[data-reroll]").forEach(b=>b.addEventListener("click",()=>{
-    const idx=+b.dataset.reroll;
-    const c=CURRENT_CODIS[idx];
-    const origin=c&&typeof c.origin==="number"?c.origin:idx;
-    delete CODI_OVERRIDES[origin];           // 해당 코디의 수동 교체 초기화
-    REROLL[origin]=(REROLL[origin]||0)+7;     // 시드 점프(+7)로 다른 조합 유도
+    const idx=+b.dataset.reroll;delete CODI_OVERRIDES[idx];
+    WEATHER={...WEATHER,high:WEATHER.high+ (Math.random()<.5?0.0001:-0.0001)}; // 미세 변화로 pick 시드 흔들기
+    WEATHER.high=Math.round(WEATHER.high);
     render();
   }));
 }
@@ -837,55 +808,9 @@ function applyWeatherKeepPanel(){
   renderWeather();
 }
 
-// 색상을 그룹으로 정규화 (필터용)
-function colorGroup(color){
-  const c=(color||"").toLowerCase();
-  if(!c)return"기타";
-  if(/인디고|네이비|블루|블루|navy|indigo|blue|데님/.test(c))return"블루·인디고";
-  if(/블랙|차콜|black|charcoal|caviar/.test(c))return"블랙";
-  if(/화이트|아이보리|크림|white|ivory/.test(c))return"화이트·아이보리";
-  if(/그레이|회색|melange|멜란지|gray|grey/.test(c))return"그레이";
-  if(/베이지|카멜|탄|오트밀|brown|브라운|beige|khaki|카키/.test(c))return"베이지·브라운";
-  return"기타";
-}
-// 용도 추론 (note·name·카테고리에서)
-function useOf(i){
-  const n=(i.name||"").toLowerCase(), t=(n+(i.note||"")).toLowerCase();
-  // 신발은 종류로 세분
-  if(i.cat==="SH"){
-    if(/fresh foam|fuelcell|노바|슈퍼블라스트|860|1080/i.test(n))return"운동";
-    if(/로퍼|구두|더비|부츠|드레스/i.test(n))return"업무·포멀";
-    return"캐주얼";
-  }
-  if(/출근|비즈니스|미팅|슬랙스|로퍼|구두|해링턴|블레이저|옥스포드|폴로/i.test(t))return"업무·포멀";
-  if(/운동|러닝|짐|트레이닝/i.test(t))return"운동";
-  if(/이너|레이어드|심리스|에어리즘/i.test(t))return"이너·기본";
-  if(/그래픽|캐주얼|시티|아메리카나|포인트|반팔|릴렉스|오버/i.test(t)||/티셔츠/.test(n))return"캐주얼";
-  if(i.cat==="PF")return"향수";
-  if(i.cat==="AC")return"소품";
-  return"공용";
-}
-
 function renderCloset(){
-  const c=counts();
-  // 후보 목록 (필터·검색 적용)
-  const q=CLOSET.q.trim().toLowerCase();
-  const list=ITEMS.filter(i=>{
-    if(CLOSET.cat!=="ALL"&&i.cat!==CLOSET.cat)return false;
-    if(CLOSET.brand!=="ALL"&&(i.brand||"")!==CLOSET.brand)return false;
-    if(CLOSET.color!=="ALL"&&colorGroup(i.color)!==CLOSET.color)return false;
-    if(CLOSET.use!=="ALL"&&useOf(i)!==CLOSET.use)return false;
-    if(q){
-      const hay=[i.code,i.brand,i.name,i.color,i.material,i.fit,i.size,i.note].filter(Boolean).join(" ").toLowerCase();
-      if(!hay.includes(q))return false;
-    }
-    return true;
-  });
-  // 필터 옵션 동적 추출
-  const brands=[...new Set(ITEMS.map(i=>i.brand).filter(Boolean))].sort();
-  const colors=[...new Set(ITEMS.map(i=>colorGroup(i.color)))].sort();
-  const uses=[...new Set(ITEMS.map(useOf))].sort();
-
+  const c=counts(),f=window._catFilter||"ALL";
+  const list=f==="ALL"?ITEMS:ITEMS.filter(i=>i.cat===f);
   let h=`<div style="display:flex;gap:8px;margin-bottom:8px">
     <button class="ghost" id="csv-export" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">⬇ CSV 내보내기</button>
     <button class="ghost" id="csv-import" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">⬆ CSV 가져오기</button>
@@ -895,79 +820,23 @@ function renderCloset(){
     <button class="ghost" id="bk-export" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">💾 전체 백업 (사진 포함)</button>
     <button class="ghost" id="bk-import" style="flex:1;padding:9px;font-size:12.5px;color:var(--ink)">↩ 백업 복원</button>
     <input type="file" id="bk-file" accept=".json,application/json" style="display:none">
-  </div>`;
-
-  // 검색 + 보기 전환
-  h+=`<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-    <input class="inp" id="closet-q" placeholder="🔍 키워드 검색 (브랜드·모델·색상·소재…)" value="${esc(CLOSET.q)}" style="flex:1">
-    <div style="display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:0 0 auto">
-      <button class="ghost" id="view-card" style="padding:8px 11px;font-size:12px;color:${CLOSET.view==="card"?"var(--ink)":"var(--sub)"};background:${CLOSET.view==="card"?"var(--line)":"transparent"};border-radius:0">카드</button>
-      <button class="ghost" id="view-table" style="padding:8px 11px;font-size:12px;color:${CLOSET.view==="table"?"var(--ink)":"var(--sub)"};background:${CLOSET.view==="table"?"var(--line)":"transparent"};border-radius:0">표</button>
-    </div>
-  </div>`;
-
-  // 필터 드롭다운 (분류·브랜드·색상·용도)
-  const sel=(id,label,cur,opts)=>{
-    let s=`<select class="inp" id="${id}" style="flex:1;min-width:0;padding:7px 8px;font-size:12px"><option value="ALL"${cur==="ALL"?" selected":""}>${label} 전체</option>`;
-    opts.forEach(o=>{const v=typeof o==="object"?o.v:o;const t=typeof o==="object"?o.t:o;s+=`<option value="${esc(v)}"${cur===v?" selected":""}>${esc(t)}</option>`;});
-    return s+`</select>`;
-  };
-  const catOpts=Object.entries(CATEGORIES).filter(([k])=>c[k]>0).map(([k,l])=>({v:k,t:`${l} ${c[k]}`}));
-  h+=`<div style="display:flex;gap:6px;margin-bottom:8px">
-    ${sel("f-cat","분류",CLOSET.cat,catOpts)}
-    ${sel("f-brand","브랜드",CLOSET.brand,brands)}
   </div>
-  <div style="display:flex;gap:6px;margin-bottom:12px">
-    ${sel("f-color","색상",CLOSET.color,colors)}
-    ${sel("f-use","용도",CLOSET.use,uses)}
-  </div>`;
-
-  // 결과 수 + 초기화
-  const anyFilter=CLOSET.cat!=="ALL"||CLOSET.brand!=="ALL"||CLOSET.color!=="ALL"||CLOSET.use!=="ALL"||CLOSET.q;
-  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <span style="font-size:12px;color:var(--sub)">${list.length}벌 표시${anyFilter?` / 전체 ${ITEMS.length}벌`:""}</span>
-    ${anyFilter?`<button class="ghost" id="f-reset" style="padding:4px 10px;font-size:11px;color:var(--sub)">필터 초기화</button>`:""}
-  </div>`;
-
-  if(!list.length){
-    h+=`<div style="text-align:center;color:var(--sub);font-size:13px;padding:30px 0">조건에 맞는 옷이 없어요.</div>`;
-  }else if(CLOSET.view==="table"){
-    // ===== 표 보기 (가로 스크롤) =====
-    h+=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px">
-      <table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:540px">
-      <thead><tr style="background:var(--line)">
-        ${["코드","분류","브랜드","모델명","색상","소재","핏",""].map(x=>`<th style="text-align:left;padding:8px 9px;font-weight:700;white-space:nowrap">${x}</th>`).join("")}
-      </tr></thead><tbody>`;
-    list.forEach(i=>{
-      h+=`<tr data-edit="${i.code}" style="cursor:pointer;border-top:1px solid var(--line)">
-        <td style="padding:7px 9px;font-weight:800;color:var(--accent);white-space:nowrap">${i.code}</td>
-        <td style="padding:7px 9px;white-space:nowrap">${CATEGORIES[i.cat]||i.cat}</td>
-        <td style="padding:7px 9px;white-space:nowrap">${esc(i.brand||"-")}</td>
-        <td style="padding:7px 9px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name||"")}</td>
-        <td style="padding:7px 9px;white-space:nowrap"><span class="swatch" style="width:11px;height:11px;background:${colorToHex(i.color)};display:inline-block;vertical-align:middle;margin-right:4px;border-radius:3px"></span>${esc(i.color||"-")}</td>
-        <td style="padding:7px 9px;white-space:nowrap">${esc(i.material||"-")}</td>
-        <td style="padding:7px 9px;white-space:nowrap">${esc(i.fit||"-")}</td>
-        <td style="padding:7px 9px;text-align:center"><button data-del="${i.code}" style="background:transparent;color:var(--sub);font-size:15px;line-height:1;padding:0 4px">×</button></td>
-      </tr>`;
-    });
-    h+=`</tbody></table></div>`;
-  }else{
-    // ===== 카드 보기 =====
-    h+=`<div style="display:grid;gap:7px">`;
-    list.forEach(i=>{h+=`<div class="card" data-edit="${i.code}" style="padding:11px 13px;display:flex;align-items:center;gap:11px;cursor:pointer">
-      ${i.photo
-        ? `<span style="width:34px;height:34px;border-radius:8px;background:url('${i.photo}') center/cover;border:1px solid var(--line);flex:0 0 auto"></span>`
-        : `<span class="swatch" style="width:34px;height:34px;border-radius:8px;background:${colorToHex(i.color)};display:flex;align-items:center;justify-content:center;font-size:10px;color:#0008">${CATEGORIES[i.cat].slice(0,1)}</span>`}
-      <span style="font-size:10.5px;font-weight:800;color:var(--accent);width:42px;flex:0 0 auto">${i.code}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((i.brand?i.brand+" ":"")+i.name)}</div>
-        <div style="font-size:11.5px;color:var(--sub);margin-top:1px">${esc([i.size,i.color,i.material,i.fit].filter(Boolean).join(" · "))}</div></div>
-      <button data-del="${i.code}" style="background:transparent;color:var(--sub);font-size:17px;line-height:1;padding:2px 6px;border-radius:6px;flex:0 0 auto">×</button></div>`;});
-    h+=`</div>`;
-  }
-
+  <div style="font-size:10.5px;color:var(--sub);margin-bottom:14px;line-height:1.4">CSV는 텍스트만(엑셀 호환) · 전체 백업은 사진까지 포함한 완전 복사본(JSON)</div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px">
+    <button class="chip ${f==="ALL"?"on":""}" data-cf="ALL">전체 ${ITEMS.length}</button>`;
+  Object.entries(CATEGORIES).forEach(([k,l])=>{if(c[k]>0)h+=`<button class="chip ${f===k?"on":""}" data-cf="${k}">${l} ${c[k]}</button>`;});
+  h+=`</div><div style="display:grid;gap:7px">`;
+  list.forEach(i=>{h+=`<div class="card" data-edit="${i.code}" style="padding:11px 13px;display:flex;align-items:center;gap:11px;cursor:pointer">
+    ${i.photo
+      ? `<span style="width:34px;height:34px;border-radius:8px;background:url('${i.photo}') center/cover;border:1px solid var(--line);flex:0 0 auto"></span>`
+      : `<span class="swatch" style="width:34px;height:34px;border-radius:8px;background:${colorToHex(i.color)};display:flex;align-items:center;justify-content:center;font-size:10px;color:#0008">${CATEGORIES[i.cat].slice(0,1)}</span>`}
+    <span style="font-size:10.5px;font-weight:800;color:var(--accent);width:42px;flex:0 0 auto">${i.code}</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((i.brand?i.brand+" ":"")+i.name)}</div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:1px">${esc([i.size,i.color,i.material,i.fit].filter(Boolean).join(" · "))}</div></div>
+    <button data-del="${i.code}" style="background:transparent;color:var(--sub);font-size:17px;line-height:1;padding:2px 6px;border-radius:6px;flex:0 0 auto">×</button></div>`;});
+  h+=`</div>`;
   view.innerHTML=h;
-  // 파일 버튼
   document.getElementById("csv-export").addEventListener("click",exportCSV);
   const fileInput=document.getElementById("csv-file");
   document.getElementById("csv-import").addEventListener("click",()=>fileInput.click());
@@ -976,28 +845,6 @@ function renderCloset(){
   const bkInput=document.getElementById("bk-file");
   document.getElementById("bk-import").addEventListener("click",()=>bkInput.click());
   bkInput.addEventListener("change",e=>{const file=e.target.files[0];if(file)handleBackupFile(file);e.target.value="";});
-  // 검색 (입력 유지)
-  const qIn=document.getElementById("closet-q");
-  qIn.addEventListener("input",e=>{CLOSET.q=e.target.value;renderClosetKeepFocus();});
-  // 보기 전환
-  document.getElementById("view-card").addEventListener("click",()=>{CLOSET.view="card";renderCloset();});
-  document.getElementById("view-table").addEventListener("click",()=>{CLOSET.view="table";renderCloset();});
-  // 필터 셀렉트
-  document.getElementById("f-cat").addEventListener("change",e=>{CLOSET.cat=e.target.value;renderCloset();});
-  document.getElementById("f-brand").addEventListener("change",e=>{CLOSET.brand=e.target.value;renderCloset();});
-  document.getElementById("f-color").addEventListener("change",e=>{CLOSET.color=e.target.value;renderCloset();});
-  document.getElementById("f-use").addEventListener("change",e=>{CLOSET.use=e.target.value;renderCloset();});
-  const reset=document.getElementById("f-reset");
-  if(reset)reset.addEventListener("click",()=>{CLOSET={cat:"ALL",brand:"ALL",color:"ALL",use:"ALL",q:"",view:CLOSET.view};renderCloset();});
-}
-
-// 검색 입력 중 포커스·커서 유지를 위해 리스트만 다시 그림
-function renderClosetKeepFocus(){
-  const qIn=document.getElementById("closet-q");
-  const pos=qIn?qIn.selectionStart:null;
-  renderCloset();
-  const q2=document.getElementById("closet-q");
-  if(q2){q2.focus();if(pos!=null){try{q2.setSelectionRange(pos,pos);}catch(e){}}}
 }
 
 // ====== 전체 백업 (JSON, 사진 포함) ======
@@ -1022,7 +869,7 @@ function handleBackupFile(file){
     if(!confirm(`백업 복원: ${valid.length}벌${photoN?` (사진 ${photoN}장 포함)`:""}\n\n현재 옷장을 이 백업으로 전체 교체합니다. 계속할까요?`))return;
     ITEMS=valid.map(i=>({...i,cat:CATEGORIES[i.cat]?i.cat:"UN"}));
     if(save(ITEMS)){
-      CLOSET.cat="ALL";renderWeather();render();
+      window._catFilter="ALL";renderWeather();render();
       alert("복원 완료 · 현재 "+ITEMS.length+"벌");
     }
   };
@@ -1130,7 +977,7 @@ function applyImport(parsed,mode){
     });
   }
   save(ITEMS);
-  CLOSET.cat="ALL";
+  window._catFilter="ALL";
   renderWeather();render();
   alert((mode==="replace"?"전체 교체":"병합")+" 완료 · 현재 "+ITEMS.length+"벌");
 }
@@ -1187,9 +1034,9 @@ function renderAdd(){
     if(editing){
       const idx=ITEMS.findIndex(i=>i.code===window._editCode);
       if(idx>=0)ITEMS[idx]={...ITEMS[idx],...d,code:window._editCode};
-      CLOSET.cat=d.cat;
+      window._catFilter=d.cat;
     }else{
-      ITEMS.push({...d,code:nextCode(d.cat)});CLOSET.cat=d.cat;
+      ITEMS.push({...d,code:nextCode(d.cat)});window._catFilter=d.cat;
     }
     save(ITEMS);window._draft=null;window._editCode=null;currentTab="closet";setTab();renderWeather();render();
   });
@@ -1225,6 +1072,7 @@ document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
   currentTab=b.dataset.tab;setTab();render();
 }));
 view.addEventListener("click",e=>{
+  const cf=e.target.closest("[data-cf]"); if(cf){window._catFilter=cf.dataset.cf;render();return;}
   const del=e.target.closest("[data-del]"); if(del){e.stopPropagation();const it=ITEMS.find(i=>i.code===del.dataset.del);if(confirm((it?it.name:"이 항목")+" 을(를) 삭제할까요?")){ITEMS=ITEMS.filter(i=>i.code!==del.dataset.del);save(ITEMS);renderWeather();render();}return;}
   const ed=e.target.closest("[data-edit]"); if(ed){startEdit(ed.dataset.edit);return;}
 });
