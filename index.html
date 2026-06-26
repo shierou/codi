@@ -303,6 +303,7 @@ function outerFit(base,outer){
 function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
 // TPO 상태 (전역) — 사용자가 오늘 코디 탭에서 토글
 let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
+let REROLL=[0,0,0]; // 코디별 새로고침 시드 (전체 새로 버튼)
 
 function fitGuide(item,role,t){
   // 기장/턱인 가이드 — 기온과 아이템 성격 반영
@@ -385,12 +386,13 @@ function buildCodis(items,w){
 
   // 1 캐주얼 시티보이 (+텍스처 믹스)
   {
-    const top=pick(casualTops.length?casualTops:wantTops,t);
-    const bottom=pick(denim.length?denim:bottoms,t+1);
-    const shoe=shoeForTPO(sneakers.length?sneakers:shoes,t+2);
+    const s=t+REROLL[0];
+    const top=pick(casualTops.length?casualTops:wantTops,s);
+    const bottom=pick(denim.length?denim:bottoms,s+1);
+    const shoe=shoeForTPO(sneakers.length?sneakers:shoes,s+2);
     R.push({title:"캐주얼 시티보이",vibe:"가볍고 세련된 도심 캐주얼",accent:"#3b6ea5",style:"casual",
-      slots:{outer:band!=="hot"?pick(wantOuter,t+3):null,top,bottom,shoe},
-      perfume:pick(perfumes,t),
+      slots:{outer:band!=="hot"?pick(wantOuter,s+3):null,top,bottom,shoe},
+      perfume:pick(perfumes,s),
       accessories:accessoryLayer("casual"),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
@@ -401,13 +403,14 @@ function buildCodis(items,w){
   {
     const minT=wantTops.filter(i=>/솔리드|화이트|니트|셔츠|폴로|심리스/.test((i.pattern||"")+(i.color||"")+(i.name||"")));
     const cleanS=shoes.filter(i=>/스탠 스미스|삼바|로퍼|996|992|990|998/.test(i.name||""));
-    const top=pick(minT.length?minT:wantTops,t+4);
-    const bottom=pick(chinos.length?chinos:bottoms,t+5);
-    const shoe=TPO.biz?(pick(dressShoes.length?dressShoes:cleanS,t+6)):shoeForTPO(cleanS.length?cleanS:shoes,t+6);
+    const s=t+REROLL[1];
+    const top=pick(minT.length?minT:wantTops,s+4);
+    const bottom=pick(chinos.length?chinos:bottoms,s+5);
+    const shoe=TPO.biz?(pick(dressShoes.length?dressShoes:cleanS,s+6)):shoeForTPO(cleanS.length?cleanS:shoes,s+6);
     const blazer=TPO.biz?(blazers[0]||smartOuter[0]||null):null;
     R.push({title:TPO.biz?"비즈니스 캐주얼":"미니멀 클린",vibe:TPO.biz?(blazers.length?"블레이저 한 겹으로 격을 올린 룩":"깔끔한 아우터로 격식을 더한 룩"):"조용한 럭셔리 · 단정한 무드",accent:"#6b7152",style:TPO.biz?"biz":"minimal",
-      slots:{outer:blazer||(band!=="hot"?pick(wantOuter,t+7):null),top,bottom,shoe},
-      perfume:pick(perfumes,t+1),
+      slots:{outer:blazer||(band!=="hot"?pick(wantOuter,s+7):null),top,bottom,shoe},
+      perfume:pick(perfumes,s+1),
       accessories:accessoryLayer(TPO.biz?"biz":"minimal"),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
@@ -418,27 +421,30 @@ function buildCodis(items,w){
   // 3 날씨 기능성
   {
     let title,vibe,accent,slots,style="func";
+    const s=t+REROLL[2];
     if(rain){
       const ws=shoes.filter(i=>/방수|gtx|고어|ecco/i.test((i.note||"")+(i.brand||"")));
-      const top=pick(wantTops,t+8),bottom=pick(bottoms.filter(i=>/다크|블랙|네이비|인디고/.test(i.color||"")),t)||pick(bottoms,t+9);
+      const top=pick(wantTops,s+8),bottom=pick(bottoms.filter(i=>/다크|블랙|네이비|인디고/.test(i.color||"")),s)||pick(bottoms,s+9);
       title="우천 대응";vibe="비 오는 날 발 안 젖는 조합";accent="#34507a";
-      slots={outer:pick(outers.filter(i=>/윈드|폴리|블루종/.test((i.name||"")+(i.material||""))),t)||pick(outers,t),top,bottom,shoe:pick(ws.length?ws:sneakers,t)};
+      slots={outer:pick(outers.filter(i=>/윈드|폴리|블루종/.test((i.name||"")+(i.material||""))),s)||pick(outers,s),top,bottom,shoe:pick(ws.length?ws:sneakers,s)};
     }else if(band==="hot"){
-      const top=pick(wantTops.filter(i=>/에어리즘|반팔|오버|tee/i.test((i.name||"")+(i.note||""))),t)||pick(wantTops,t);
-      const bottom=pick(denim.concat(chinos),t+10);
+      const top=pick(wantTops.filter(i=>/에어리즘|반팔|오버|tee/i.test((i.name||"")+(i.note||""))),s)||pick(wantTops,s);
+      const bottom=pick(denim.concat(chinos),s+10);
       title="쿨 & 통기성";vibe="덥고 습한 날 쾌적 우선";accent="#c97b4a";
-      slots={outer:null,top,bottom,shoe:shoeForTPO(sneakers,t+11)};
+      slots={outer:null,top,bottom,shoe:shoeForTPO(sneakers,s+11)};
     }else{
       const perf=shoes.filter(i=>/860|1080|fresh foam|fuelcell|노바|슈퍼블라스트/i.test(i.name||""));
-      const top=pick(wantTops,t+8),bottom=pick(bottoms,t+9);
+      const top=pick(wantTops,s+8),bottom=pick(bottoms,s+9);
       title="날씨 기능성";vibe="편안한 기능성 데일리";accent="#c97b4a";
-      slots={outer:band!=="hot"?pick(wantOuter,t+12):null,top,bottom,shoe:pick(perf.length?perf:sneakers,t)};
+      slots={outer:band!=="hot"?pick(wantOuter,s+12):null,top,bottom,shoe:pick(perf.length?perf:sneakers,s)};
     }
-    R.push({title,vibe,accent,style,slots,perfume:pick(perfumes,t+2),
+    R.push({title,vibe,accent,style,slots,perfume:pick(perfumes,s+2),
       accessories:accessoryLayer("casual"),bag:bagSuggest(),
       texture:textureNote(slots.top,slots.bottom),
       fit:{top:fitGuide(slots.top,"top",t),bottom:fitGuide(slots.bottom,"bottom",t)}});
   }
+  // 각 코디에 원본 슬롯 번호 부여 (정렬 후에도 REROLL 인덱스 추적용)
+  R.forEach((c,i)=>{c.origin=i;});
   // v3 점수화: 각 코디에 점수·등급·근거 부여
   R.forEach(c=>{
     const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
@@ -583,8 +589,9 @@ let CURRENT_CODIS=[];
 const ROLE_LABEL={outer:"아우터",top:"상의",bottom:"하의",shoe:"신발"};
 
 function applyOverrides(codis){
-  codis.forEach((c,idx)=>{
-    const ov=CODI_OVERRIDES[idx];if(!ov)return;
+  codis.forEach((c)=>{
+    const key=typeof c.origin==="number"?c.origin:codis.indexOf(c);
+    const ov=CODI_OVERRIDES[key];if(!ov)return;
     Object.keys(ov).forEach(role=>{
       const it=ITEMS.find(i=>i.code===ov[role]);
       if(it)c.slots[role]=it;
@@ -706,18 +713,21 @@ function bindCodiEdits(){
   view.querySelectorAll("[data-swap]").forEach(b=>b.addEventListener("click",()=>{
     const [idxs,role]=b.dataset.swap.split(":");const idx=+idxs;
     const c=CURRENT_CODIS[idx];const cur=c.slots[role];
+    const origin=c&&typeof c.origin==="number"?c.origin:idx;
     const pool=altPool(role,ITEMS,WEATHER);
     if(pool.length<2){toast("교체할 다른 "+ROLE_LABEL[role]+"이(가) 없어요");return;}
     const ci=pool.findIndex(i=>i.code===(cur&&cur.code));
     const next=pool[(ci+1+pool.length)%pool.length];
-    CODI_OVERRIDES[idx]=CODI_OVERRIDES[idx]||{};CODI_OVERRIDES[idx][role]=next.code;
+    CODI_OVERRIDES[origin]=CODI_OVERRIDES[origin]||{};CODI_OVERRIDES[origin][role]=next.code;
     render();
   }));
-  // 전체 새로 (override 제거 + 시드 흔들기)
+  // 전체 새로 (해당 코디 시드를 흔들어 새 조합 생성)
   view.querySelectorAll("[data-reroll]").forEach(b=>b.addEventListener("click",()=>{
-    const idx=+b.dataset.reroll;delete CODI_OVERRIDES[idx];
-    WEATHER={...WEATHER,high:WEATHER.high+ (Math.random()<.5?0.0001:-0.0001)}; // 미세 변화로 pick 시드 흔들기
-    WEATHER.high=Math.round(WEATHER.high);
+    const idx=+b.dataset.reroll;
+    const c=CURRENT_CODIS[idx];
+    const origin=c&&typeof c.origin==="number"?c.origin:idx;
+    delete CODI_OVERRIDES[origin];           // 해당 코디의 수동 교체 초기화
+    REROLL[origin]=(REROLL[origin]||0)+7;     // 시드 점프(+7)로 다른 조합 유도
     render();
   }));
 }
