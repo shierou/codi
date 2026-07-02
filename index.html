@@ -73,6 +73,48 @@
 // ====== 카테고리 ======
 const CATEGORIES={OT:"아우터",TP:"상의",BT:"하의",SH:"신발",AC:"액세서리",PF:"향수",UN:"미분류"};
 
+// ===== 소분류(서브카테고리) 체계 — Acloset 참고 =====
+const SUBCATS={
+  TP:["티셔츠","카라티","셔츠","맨투맨","니트"],
+  BT:["청바지","면바지","슬랙스"],
+  OT:["코트","자켓","셔츠자켓","블레이저","트러커","바람막이"],
+  SH:["스니커즈","로퍼·구두","러닝화","부츠"],
+  AC:["액세서리"], PF:["향수"], UN:["기타"]
+};
+// 아이템의 소분류 자동 추론 (i.sub 지정 시 우선)
+function subOf(i){
+  if(i.sub)return i.sub;
+  const n=(i.name||""), t=n+(i.material||"")+(i.note||"");
+  switch(i.cat){
+    case"TP":
+      if(/니트|캐시미어|스웨터/.test(t))return"니트";
+      if(/맨투맨|스웨트|후드/.test(t))return"맨투맨";
+      if(/폴로|카라|피케/.test(t))return"카라티";
+      if(/티셔츠|t셔츠|반팔|tee|크루넥|그래픽|오버사이즈 t/i.test(n))return"티셔츠";
+      if(/셔츠|옥스포드|체크|플란넬|스트라이프/.test(n))return"셔츠";
+      return"티셔츠";
+    case"BT":
+      if(/데님|청바지|jean|501|502|505|511|541|550|555|565|568/i.test(t))return"청바지";
+      if(/슬랙스|정장|드레스/.test(t))return"슬랙스";
+      return"면바지"; // 치노·코튼·혼방
+    case"OT":
+      if(/코트|coat|맥코트/.test(t))return"코트";
+      if(/블레이저|blazer/.test(t))return"블레이저";
+      if(/트러커|트럭커|trucker/.test(t))return"트러커";
+      if(/셔츠 자켓|셔켓|셔츠자켓|오버셔츠/.test(t))return"셔츠자켓";
+      if(/윈드|바람막이|블루종|폴리|집업/.test(t))return"바람막이";
+      return"자켓";
+    case"SH":
+      if(/부츠|boot/.test(t))return"부츠";
+      if(/fresh foam|fuelcell|노바|슈퍼블라스트|860|1080|러닝/i.test(t))return"러닝화";
+      if(/로퍼|구두|더비|드레스/.test(t))return"로퍼·구두";
+      return"스니커즈";
+    case"AC":return"액세서리";
+    case"PF":return"향수";
+    default:return"기타";
+  }
+}
+
 // ====== 시드 데이터 (BT007 중복 → BT007~BT016 재배열 적용) ======
 const SEED=[
 {code:"OT001",cat:"OT",brand:"Levi's",name:"Blue Tab™ Denim Mac Coat",size:"L",color:"인디고",material:"데님",note:"세련된 데님 맥코트"},
@@ -443,18 +485,17 @@ function buildCodis(items,w){
   const blazers=outers.filter(i=>/블레이저|blazer/i.test((i.name||"")));
   const smartOuter=outers.filter(i=>/해링턴|윈드|블레이저|blazer/i.test(i.name||""));
 
-  // ===== 셔츠 레이어(아우터2) 후보: 긴팔 셔츠만 (옥스포드·데님·체크 등) =====
-  // 반팔·티셔츠 제외, 온도 맞는 것만. 안에 입는 상의가 셔츠면 중복이라 호출부에서 제외.
+  // ===== 셔츠 레이어(아우터2) 후보: 소분류가 '셔츠'인 긴팔만 =====
   const shirtLayerPool=tops.filter(i=>{
-    const n=i.name||"";
-    const isShirt=/셔츠|체크|플란넬|옥스포드/.test(n)&&!/티셔츠|t셔츠/i.test(n);
-    return isShirt&&!isHeavy(i)&&tempFit(i,t)!=="out";
+    const isShirt=subOf(i)==="셔츠";
+    const shortSleeve=/반팔|tee|티셔츠/i.test(i.name||"");
+    return isShirt&&!shortSleeve&&!isHeavy(i)&&tempFit(i,t)!=="out";
   });
   // 셔츠 레이어 선택: 안 상의(innerTop)와 안 겹치고, 색상도 다르면 좋음
   const pickShirtLayer=(innerTop,seed)=>{
     if(t>=23)return null; // 더운 날엔 레이어 불필요
     // 안에 셔츠를 입었으면 레이어 생략 (셔츠 위 셔츠 방지)
-    if(innerTop&&/셔츠/.test(innerTop.name||"")&&!/티셔츠/i.test(innerTop.name||""))return null;
+    if(innerTop&&subOf(innerTop)==="셔츠")return null;
     const pool=shirtLayerPool.filter(i=>!innerTop||i.code!==innerTop.code);
     if(!pool.length)return null;
     return pick(pool,seed);
@@ -660,7 +701,7 @@ function condText(c){
 // ====== 렌더 ======
 let currentTab="today";
 // 옷장 필터/검색/보기 상태
-let CLOSET={cat:"ALL",brand:"ALL",color:"ALL",use:"ALL",season:"ALL",q:"",view:"card"};
+let CLOSET={cat:"ALL",sub:"ALL",brand:"ALL",color:"ALL",use:"ALL",season:"ALL",q:"",view:"card"};
 const view=document.getElementById("view");
 function esc(s){return(s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
 
@@ -1001,6 +1042,7 @@ function renderCloset(){
   const q=CLOSET.q.trim().toLowerCase();
   const list=ITEMS.filter(i=>{
     if(CLOSET.cat!=="ALL"&&i.cat!==CLOSET.cat)return false;
+    if(CLOSET.sub!=="ALL"&&subOf(i)!==CLOSET.sub)return false;
     if(CLOSET.brand!=="ALL"&&(i.brand||"")!==CLOSET.brand)return false;
     if(CLOSET.color!=="ALL"&&colorGroup(i.color)!==CLOSET.color)return false;
     if(CLOSET.use!=="ALL"&&useOf(i)!==CLOSET.use)return false;
@@ -1051,21 +1093,27 @@ function renderCloset(){
     return s+`</select>`;
   };
   const catOpts=Object.entries(CATEGORIES).filter(([k])=>c[k]>0).map(([k,l])=>({v:k,t:`${l} ${c[k]}`}));
+  // 소분류 옵션: 선택된 대분류의 SUBCATS 중 실제 존재하는 것만
+  let subOpts=[];
+  if(CLOSET.cat!=="ALL"&&SUBCATS[CLOSET.cat]){
+    const present=new Set(ITEMS.filter(i=>i.cat===CLOSET.cat).map(subOf));
+    subOpts=SUBCATS[CLOSET.cat].filter(s=>present.has(s));
+  }
   h+=`<div style="display:flex;gap:6px;margin-bottom:8px">
     ${sel("f-cat","분류",CLOSET.cat,catOpts)}
     ${sel("f-brand","브랜드",CLOSET.brand,brands)}
   </div>
   <div style="display:flex;gap:6px;margin-bottom:12px">
+    ${subOpts.length?sel("f-sub","소분류",CLOSET.sub,subOpts):`<div style="flex:1;padding:7px 8px;font-size:11.5px;color:var(--sub);opacity:.5;border:1px solid var(--line);border-radius:8px">소분류 (분류 선택 시)</div>`}
     ${sel("f-color","색상",CLOSET.color,colors)}
-    ${sel("f-use","용도",CLOSET.use,uses)}
   </div>
   <div style="display:flex;gap:6px;margin-bottom:12px">
+    ${sel("f-use","용도",CLOSET.use,uses)}
     ${sel("f-season","계절",CLOSET.season,["봄","여름","가을","겨울"])}
-    <div style="flex:1"></div>
   </div>`;
 
   // 결과 수 + 초기화
-  const anyFilter=CLOSET.cat!=="ALL"||CLOSET.brand!=="ALL"||CLOSET.color!=="ALL"||CLOSET.use!=="ALL"||CLOSET.season!=="ALL"||CLOSET.q;
+  const anyFilter=CLOSET.cat!=="ALL"||CLOSET.sub!=="ALL"||CLOSET.brand!=="ALL"||CLOSET.color!=="ALL"||CLOSET.use!=="ALL"||CLOSET.season!=="ALL"||CLOSET.q;
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
     <span style="font-size:12px;color:var(--sub)">${list.length}벌 표시${anyFilter?` / 전체 ${ITEMS.length}벌`:""}</span>
     ${anyFilter?`<button class="ghost" id="f-reset" style="padding:4px 10px;font-size:11px;color:var(--sub)">필터 초기화</button>`:""}
@@ -1078,12 +1126,13 @@ function renderCloset(){
     h+=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px">
       <table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:540px">
       <thead><tr style="background:var(--line)">
-        ${["코드","분류","브랜드","모델명","색상","소재","핏","온도","계절",""].map(x=>`<th style="text-align:left;padding:8px 9px;font-weight:700;white-space:nowrap">${x}</th>`).join("")}
+        ${["코드","분류","소분류","브랜드","모델명","색상","소재","핏","온도","계절",""].map(x=>`<th style="text-align:left;padding:8px 9px;font-weight:700;white-space:nowrap">${x}</th>`).join("")}
       </tr></thead><tbody>`;
     list.forEach(i=>{
       h+=`<tr data-edit="${i.code}" style="cursor:pointer;border-top:1px solid var(--line)">
         <td style="padding:7px 9px;font-weight:800;color:var(--accent);white-space:nowrap">${i.code}</td>
         <td style="padding:7px 9px;white-space:nowrap">${CATEGORIES[i.cat]||i.cat}</td>
+        <td style="padding:7px 9px;white-space:nowrap;color:${i.sub?"var(--ink)":"var(--sub)"}">${i.sub?esc(i.sub):`<span style="opacity:.6">${esc(subOf(i))}</span>`}</td>
         <td style="padding:7px 9px;white-space:nowrap">${esc(i.brand||"-")}</td>
         <td style="padding:7px 9px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name||"")}</td>
         <td style="padding:7px 9px;white-space:nowrap"><span class="swatch" style="width:11px;height:11px;background:${colorToHex(i.color)};display:inline-block;vertical-align:middle;margin-right:4px;border-radius:3px"></span>${esc(i.color||"-")}</td>
@@ -1105,7 +1154,7 @@ function renderCloset(){
       <span style="font-size:10.5px;font-weight:800;color:var(--accent);width:42px;flex:0 0 auto">${i.code}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((i.brand?i.brand+" ":"")+i.name)}</div>
-        <div style="font-size:11.5px;color:var(--sub);margin-top:1px">${esc([i.size,i.color,i.material,i.fit].filter(Boolean).join(" · "))}</div></div>
+        <div style="font-size:11.5px;color:var(--sub);margin-top:1px">${esc([subOf(i),i.size,i.color,i.material,i.fit].filter(Boolean).join(" · "))}</div></div>
       <button data-del="${i.code}" style="background:transparent;color:var(--sub);font-size:17px;line-height:1;padding:2px 6px;border-radius:6px;flex:0 0 auto">×</button></div>`;});
     h+=`</div>`;
   }
@@ -1137,14 +1186,16 @@ function renderCloset(){
   document.getElementById("view-card").addEventListener("click",()=>{CLOSET.view="card";renderCloset();});
   document.getElementById("view-table").addEventListener("click",()=>{CLOSET.view="table";renderCloset();});
   // 필터 셀렉트
-  document.getElementById("f-cat").addEventListener("change",e=>{CLOSET.cat=e.target.value;renderCloset();});
+  document.getElementById("f-cat").addEventListener("change",e=>{CLOSET.cat=e.target.value;CLOSET.sub="ALL";renderCloset();});
+  const fSub=document.getElementById("f-sub");
+  if(fSub)fSub.addEventListener("change",e=>{CLOSET.sub=e.target.value;renderCloset();});
   document.getElementById("f-brand").addEventListener("change",e=>{CLOSET.brand=e.target.value;renderCloset();});
   document.getElementById("f-color").addEventListener("change",e=>{CLOSET.color=e.target.value;renderCloset();});
   document.getElementById("f-use").addEventListener("change",e=>{CLOSET.use=e.target.value;renderCloset();});
   const fSeason=document.getElementById("f-season");
   if(fSeason)fSeason.addEventListener("change",e=>{CLOSET.season=e.target.value;renderCloset();});
   const reset=document.getElementById("f-reset");
-  if(reset)reset.addEventListener("click",()=>{CLOSET={cat:"ALL",brand:"ALL",color:"ALL",use:"ALL",season:"ALL",q:"",view:CLOSET.view};renderCloset();});
+  if(reset)reset.addEventListener("click",()=>{CLOSET={cat:"ALL",sub:"ALL",brand:"ALL",color:"ALL",use:"ALL",season:"ALL",q:"",view:CLOSET.view};renderCloset();});
 }
 
 // 검색 입력 중 포커스·커서 유지를 위해 리스트만 다시 그림
@@ -1186,8 +1237,8 @@ function handleBackupFile(file){
 }
 
 // ====== CSV 입출력 ======
-const CSV_FIELDS=["code","cat","brand","name","size","color","pattern","fit","material","price","date","note","tmin","tmax","season"];
-const CSV_HEADERS=["품목코드","카테고리","브랜드","모델명","사이즈","색상","패턴","핏","소재","가격","구매일","비고","최저온도","최고온도","계절"];
+const CSV_FIELDS=["code","cat","sub","brand","name","size","color","pattern","fit","material","price","date","note","tmin","tmax","season"];
+const CSV_HEADERS=["품목코드","카테고리","소분류","브랜드","모델명","사이즈","색상","패턴","핏","소재","가격","구매일","비고","최저온도","최고온도","계절"];
 
 function csvCell(v){v=(v==null?"":String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 function exportCSV(){
@@ -1293,7 +1344,7 @@ function applyImport(parsed,mode){
 
 function renderAdd(){
   const editing=!!window._editCode;
-  const d=window._draft||(window._draft={cat:"TP",brand:"",name:"",size:"",color:"",material:"",note:"",photo:"",tmin:"",tmax:"",season:""});
+  const d=window._draft||(window._draft={cat:"TP",sub:"",brand:"",name:"",size:"",color:"",material:"",note:"",photo:"",tmin:"",tmax:"",season:""});
   if(d.photo===undefined)d.photo="";
   if(d.tmin===undefined)d.tmin="";
   if(d.tmax===undefined)d.tmax="";
@@ -1324,6 +1375,7 @@ function renderAdd(){
         </div>
       </div>
       <label class="f">카테고리<select class="inp" id="d-cat">${Object.entries(CATEGORIES).map(([k,v])=>`<option value="${k}" ${k===d.cat?"selected":""}>${v} (${k})</option>`).join("")}</select></label>
+      <label class="f">소분류 · 비우면 자동 (${subOf({...d,sub:""})})<select class="inp" id="d-sub"><option value="">자동</option>${(SUBCATS[d.cat]||[]).map(s=>`<option value="${esc(s)}" ${s===d.sub?"selected":""}>${esc(s)}</option>`).join("")}</select></label>
       <div style="display:flex;gap:10px">
         <label class="f" style="flex:1">브랜드<input class="inp" id="d-brand" value="${esc(d.brand)}" placeholder="Levi's"></label>
         <label class="f" style="flex:1">사이즈<input class="inp" id="d-size" value="${esc(d.size)}" placeholder="L / 32x30"></label></div>
@@ -1356,10 +1408,11 @@ function renderAdd(){
     <div style="display:flex;gap:10px;margin-top:18px">
       <button class="primary" id="d-save" style="flex:1">${editing?"수정 저장":"옷장에 추가"}</button>
       <button class="ghost" id="d-cancel">취소</button></div></div>`;
-  const sync=()=>{d.cat=val("d-cat");d.brand=val("d-brand");d.name=val("d-name");d.size=val("d-size");d.color=val("d-color");d.material=val("d-material");d.note=val("d-note");d.tmin=val("d-tmin");d.tmax=val("d-tmax");if(!editing)document.getElementById("nc").textContent=nextCode(d.cat);};
+  const sync=()=>{d.cat=val("d-cat");d.sub=val("d-sub");d.brand=val("d-brand");d.name=val("d-name");d.size=val("d-size");d.color=val("d-color");d.material=val("d-material");d.note=val("d-note");d.tmin=val("d-tmin");d.tmax=val("d-tmax");if(!editing)document.getElementById("nc").textContent=nextCode(d.cat);};
   ["d-brand","d-name","d-size","d-color","d-material","d-note","d-tmin","d-tmax"].forEach(id=>document.getElementById(id).addEventListener("input",sync));
   // 카테고리·소재 변경 시 온도 프리셋(placeholder)이 바뀌므로 화면 갱신
-  document.getElementById("d-cat").addEventListener("change",()=>{sync();renderAdd();});
+  document.getElementById("d-sub").addEventListener("change",e=>{d.sub=e.target.value;renderAdd();});
+  document.getElementById("d-cat").addEventListener("change",()=>{d.sub="";sync();renderAdd();});
   document.getElementById("d-material").addEventListener("blur",()=>{if(!d.tmin&&!d.tmax)renderAdd();});
   // 계절 칩 토글 (다중 선택)
   const seasonChips=document.getElementById("d-season-chips");
@@ -1463,7 +1516,7 @@ function resizePhotoFromUrl(url,cb,onfail){
 function startEdit(code){
   const it=ITEMS.find(i=>i.code===code);if(!it)return;
   window._editCode=code;
-  window._draft={cat:it.cat,brand:it.brand||"",name:it.name||"",size:it.size||"",color:it.color||"",material:it.material||"",note:it.note||"",photo:it.photo||"",pattern:it.pattern||"",fit:it.fit||"",price:it.price||"",date:it.date||"",tmin:it.tmin!=null?it.tmin:"",tmax:it.tmax!=null?it.tmax:"",season:it.season||""};
+  window._draft={cat:it.cat,sub:it.sub||"",brand:it.brand||"",name:it.name||"",size:it.size||"",color:it.color||"",material:it.material||"",note:it.note||"",photo:it.photo||"",pattern:it.pattern||"",fit:it.fit||"",price:it.price||"",date:it.date||"",tmin:it.tmin!=null?it.tmin:"",tmax:it.tmax!=null?it.tmax:"",season:it.season||""};
   currentTab="add";setTab();render();
 }
 
