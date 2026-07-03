@@ -429,6 +429,22 @@ function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
 let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
 let REROLL=[0,0,0]; // 코디별 새로고침 시드 (전체 새로 버튼)
 
+// ===== 착용 기록 (7일 내 입은 조합은 추천 제외) =====
+const WORN_KEY="codi:worn:v1";
+function loadWorn(){try{return JSON.parse(localStorage.getItem(WORN_KEY)||"[]");}catch(e){return[];}}
+function saveWorn(list){try{localStorage.setItem(WORN_KEY,JSON.stringify(list));}catch(e){}}
+function codiSig(slots){return [slots.top,slots.bottom,slots.shoe].map(x=>x?x.code:"-").join("|");}
+function isWornRecently(sig,days){
+  const now=Date.now(),ms=(days||7)*24*60*60*1000;
+  return loadWorn().some(w=>w.sig===sig&&(now-w.ts)<ms);
+}
+function markWorn(sig){
+  // 90일 지난 기록은 정리
+  const now=Date.now(),keep=loadWorn().filter(w=>(now-w.ts)<90*24*60*60*1000&&w.sig!==sig);
+  keep.push({sig,ts:now});saveWorn(keep);
+}
+function unmarkWorn(sig){saveWorn(loadWorn().filter(w=>w.sig!==sig));}
+
 function fitGuide(item,role,t){
   // 기장/턱인 가이드 — 기온과 아이템 성격 반영
   const g=[];
@@ -611,6 +627,22 @@ function buildCodis(items,w){
   }
   // 각 코디에 원본 슬롯 번호 부여 (REROLL 인덱스 추적용)
   R.forEach((c,i)=>{c.origin=i;});
+  // ===== 최근 7일 착용 조합 회피 =====
+  // 착용된 조합이면 상의→하의→신발 순으로 대체 후보를 시도해 시그니처를 바꾼다
+  R.forEach(c=>{
+    if(!isWornRecently(codiSig(c.slots),7))return;
+    const tryRoles=[["top",tops0],["bottom",bottoms0],["shoe",shoes0]];
+    outer: for(const [role,pool] of tryRoles){
+      const cur=c.slots[role]; if(!cur)continue;
+      // 온도 맞는 대체 후보를 순회 (같은 소분류 우선 → 전체)
+      const sameSub=pool.filter(x=>x.code!==cur.code&&subOf(x)===subOf(cur)&&tempFit(x,t)!=="out");
+      const others=pool.filter(x=>x.code!==cur.code&&tempFit(x,t)!=="out");
+      for(const cand of sameSub.concat(others)){
+        const trial={...c.slots,[role]:cand};
+        if(!isWornRecently(codiSig(trial),7)){c.slots[role]=cand;c.avoidedWorn=true;break outer;}
+      }
+    }
+  });
   // v3 점수화: 각 코디에 점수·등급·근거 부여 (+ 온도 적합도 반영)
   R.forEach(c=>{
     const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
@@ -821,7 +853,8 @@ function renderToday(){
         <span style="font-size:11px;font-weight:800;color:${c.accent}">코디 ${idx+1}</span>
         <span style="font-size:17px;font-weight:800">${esc(c.title)}</span>
         ${c.grade&&c.grade!=="X"?`<span title="${esc((c.reasons||[]).join(" · "))}" style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:${c.grade==="A"?"#1f7a4d":c.grade==="B"?"#8a6d1f":"#7a3b1f"};color:#fff">${c.grade} ${c.score}점</span>`:(c.invalidReason?`<span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#5a2a2a;color:#fff" title="${esc(c.invalidReason)}">⚠ ${esc(c.invalidReason)}</span>`:"")}
-        <button class="ghost" data-reroll="${idx}" style="margin-left:auto;padding:4px 10px;font-size:11px;color:var(--sub)">🔀 전체 새로</button></div>
+        <button class="ghost" data-worn="${idx}" style="margin-left:auto;padding:4px 10px;font-size:11px;color:${isWornRecently(codiSig(c.slots),7)?"#7fb37f":"var(--sub)"}">${isWornRecently(codiSig(c.slots),7)?"✓ 이번 주 착용":"👕 입었어요"}</button>
+        <button class="ghost" data-reroll="${idx}" style="padding:4px 10px;font-size:11px;color:var(--sub)">🔀 전체 새로</button></div>
       <div style="font-size:12.5px;color:var(--sub);margin-bottom:12px">${esc(c.vibe)}</div>
       <div style="display:grid;gap:7px">`;
     pieces.forEach(([role,p])=>{
@@ -911,6 +944,15 @@ function bindCodiEdits(){
     render();
   }));
   // 전체 새로 (해당 코디 시드를 흔들어 새 조합 생성)
+  // 입었어요 토글 (7일간 이 조합 추천 제외)
+  view.querySelectorAll("[data-worn]").forEach(b=>b.addEventListener("click",()=>{
+    const idx=+b.dataset.worn;
+    const c=CURRENT_CODIS[idx];if(!c)return;
+    const sig=codiSig(c.slots);
+    if(isWornRecently(sig,7)){unmarkWorn(sig);toast("착용 기록을 취소했어요");}
+    else{markWorn(sig);toast("기록됐어요. 이 조합은 7일간 추천에서 빠져요");}
+    render();
+  }));
   view.querySelectorAll("[data-reroll]").forEach(b=>b.addEventListener("click",()=>{
     const idx=+b.dataset.reroll;
     const c=CURRENT_CODIS[idx];
