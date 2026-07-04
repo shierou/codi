@@ -316,7 +316,7 @@ function seasonMatch(i,t){
 }
 function formalityOf(i){const c=_txt(i);
   if(/슬랙스|로퍼|구두|더비|드레스|해링턴|맥코트|블레이저|blazer|옥스포드 셔츠/i.test(c))return 3;
-  if(/그래픽|릴렉스|반팔|tee|티셔츠|러닝|fresh foam|fuelcell|노바|슈퍼블라스트|삼바|samba/i.test(c))return 1;
+  if(/그래픽|릴렉스|반팔|tee|티셔츠|러닝|fresh foam|fuelcell|노바|슈퍼블라스트/i.test(c))return 1;
   return 2;}
 function fitCatOf(i){const f=((i&&i.fit)||"")+" "+((i&&i.name)||"");
   // 하이브리드 우선: 선호(스트레이트/레귤러)가 하나라도 있으면 선호로 분류 (5-C)
@@ -396,7 +396,7 @@ function scoreCore(top,bottom,shoe){
   else if(fB==="WIDE"){sil+= overTop?10:18; reasons.push(overTop?"상하 볼륨 과다 10":"와이드 밸런스 18");}
   else if(fB==="SLIM"){sil+= overTop?18:12; reasons.push(overTop?"슬림+오버 18":"슬림 타이트 12");}
   // 신발 볼륨 보정 +2
-  if(shoe&&/993|992|990|2002|1906/i.test(shoe.name||"")&&(fB==="PREF"||fB==="REGULARish"))sil=Math.min(22,sil+2);
+  if(shoe&&/993|992|990|2002|1906/i.test(shoe.name||"")&&(fB==="PREF"||fB==="REGULARish"||fB==="WIDE"))sil=Math.min(22,sil+2);
 
   // ===== 격식 15 =====
   let form=0;
@@ -416,7 +416,11 @@ function scoreCore(top,bottom,shoe){
   // 핏 선호 (5-B + 하이브리드 5-C)
   if(fB==="PREF"){pref+=5;reasons.push("레귤러·스트레이트 +5");}
   else if(fB==="SLIM"){pref-=2;reasons.push("슬림 −2");}
-  else if(fB==="WIDE"){pref-=4;reasons.push("와이드 −4");}
+  else if(fB==="WIDE"){
+    const volShoe=shoe&&/993|992|990|2002|1906/i.test(shoe.name||"");
+    if(volShoe){reasons.push("와이드+볼륨 스니커즈 예외 0");}
+    else {pref-=4;reasons.push("와이드 −4");}
+  }
 
   const total=base+pref;
   let grade= total>=90?"A":total>=75?"B":total>=60?"C":"X";
@@ -438,6 +442,22 @@ function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
 // TPO 상태 (전역) — 사용자가 오늘 코디 탭에서 토글
 let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
 let REROLL=[0,0,0]; // 코디별 새로고침 시드 (전체 새로 버튼)
+
+// ===== 연간 월별 스타일링 가이드 (사용자 확정 정답 조합) =====
+const MONTHLY_GUIDE={
+  1:{title:"헤비 아우터 레이어링",combo:"헤비 아우터 + 옥스포드 셔츠 + 니트 레이어드 + 555 루즈핏 + 992",point:"셔츠 위 니트 레이어드로 보온 극대화, 데님 롤업 + 양말 포인트"},
+  2:{title:"헤비 아우터 레이어링",combo:"헤비 아우터 + 옥스포드 셔츠 + 니트 레이어드 + 555 루즈핏 + 992",point:"셔츠 위 니트 레이어드로 보온 극대화, 데님 롤업 + 양말 포인트"},
+  3:{title:"클래식 아메리칸 캐주얼",combo:"타입2 데님 트러커 + 옥스포드 셔츠(화이트) + 코튼 치노",point:"쌀쌀한 바람은 데님 자켓으로, 단정한 셔츠와 매치"},
+  4:{title:"시티보이 무드",combo:"해링턴 자켓(베이지) + 스트라이프 셔츠 + 501 인디고",point:"벚꽃 계절의 화사한 베이지 + 스트라이프 패턴"},
+  5:{title:"셔츠 단품 비즈니스",combo:"옥스포드 셔츠 + 감탄 슬랙스(네이비) + 핸드볼 스페지알",point:"턱인 + 소매 롤업만으로 완성되는 늦봄 비즈니스 룩"},
+  6:{title:"힙한 스트릿 감성",combo:"그래픽 티셔츠 + 550 릴렉스 + 993 그레이",point:"릴렉스 핏 + 그래픽티로 활동적인 초여름"},
+  7:{title:"한여름 폴로 우선",combo:"반팔 폴로 1순위 → 린넨 셔츠 → 반팔 T + 감탄 슬랙스",point:"통기성 좋은 폴로 위주, 시원함과 정갈함 동시에"},
+  8:{title:"한여름 폴로 우선",combo:"반팔 폴로 1순위 → 린넨 셔츠 → 반팔 T + 감탄 슬랙스",point:"통기성 좋은 폴로 위주, 시원함과 정갈함 동시에"},
+  9:{title:"아메리칸 워크웨어",combo:"JWA 데님 셔츠(겉옷) + 에어리즘 T + 베이지 치노",point:"선선해지면 데님 셔츠를 자켓처럼 툭 걸치기"},
+  10:{title:"성숙한 맥코트 룩",combo:"데님 맥코트 + 캐시미어 니트 + 501 + 996",point:"기장감 있는 맥코트로 지적인 가을 연출"},
+  11:{title:"무게감 있는 포멀",combo:"블레이저/두꺼운 자켓 + 스트라이프 셔츠 + 다크 슬랙스 + 더비",point:"더비 슈즈와 슬랙스로 단단한 늦가을 포멀"},
+  12:{title:"헤비 아우터 레이어링",combo:"헤비 아우터 + 옥스포드 셔츠 + 니트 레이어드 + 555 루즈핏 + 992",point:"셔츠 위 니트 레이어드로 보온 극대화"}
+};
 
 // ===== 착용 기록 (7일 내 입은 조합은 추천 제외) =====
 const WORN_KEY="codi:worn:v1";
@@ -888,7 +908,15 @@ function renderToday(){
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
       <input type="checkbox" id="tpo-biz" ${TPO.biz?"checked":""}> 비즈니스 캐주얼 변주 (블레이저 추가)</label>
   </div>`;
-  h+=`<div style="font-size:13.5px;color:var(--sub);margin-bottom:14px;line-height:1.6">${WEATHER.manual?"":esc(subj)} <b style="color:var(--ink)">${esc(WEATHER.cond)} · 최고 ${WEATHER.high}° / 최저 ${WEATHER.low}°</b>${WEATHER.manual?" 기준입니다.":" 입니다."} ${note}</div><div style="display:grid;gap:14px">`;
+  h+=`<div style="font-size:13.5px;color:var(--sub);margin-bottom:14px;line-height:1.6">${WEATHER.manual?"":esc(subj)} <b style="color:var(--ink)">${esc(WEATHER.cond)} · 최고 ${WEATHER.high}° / 최저 ${WEATHER.low}°</b>${WEATHER.manual?" 기준입니다.":" 입니다."} ${note}</div>`;
+  // 이달의 가이드 룩 (연간 스타일링 가이드)
+  const mg=MONTHLY_GUIDE[new Date().getMonth()+1];
+  if(mg)h+=`<div class="card" style="padding:13px 15px;margin-bottom:14px;border-left:3px solid #b8935f">
+    <div style="font-size:11px;font-weight:800;color:#b8935f;margin-bottom:4px">📅 ${new Date().getMonth()+1}월의 가이드 룩 · ${esc(mg.title)}</div>
+    <div style="font-size:13px;font-weight:600;line-height:1.5;margin-bottom:3px">${esc(mg.combo)}</div>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.5">💡 ${esc(mg.point)}</div>
+  </div>`;
+  h+=`<div style="display:grid;gap:14px">`;
 
   codis.forEach((c,idx)=>{
     const pieces=[["outer",c.slots.outer],["shirtLayer",c.slots.shirtLayer],["top",c.slots.top],["bottom",c.slots.bottom],["shoe",c.slots.shoe]];
