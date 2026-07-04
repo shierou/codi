@@ -353,13 +353,20 @@ function scoreCore(top,bottom,shoe){
   if(uniqTones.length===1){color+=15;reasons.push("톤 일관성 15");}
   else if(cools&&warms){ if(neus){color+=9;reasons.push("톤 완충 9");} else {color+=4;reasons.push("톤 충돌 4");} }
   else {color+=13;reasons.push("톤 근접 13");}
-  // 명도 대비 12
+  // 명도 대비 12 = 상하 대비(9) + 신발 앵커(3)
   const vT=valueOf(top),vB=valueOf(bottom);
   const order={LIGHT:0,MID:1,DARK:2};
   const diff=Math.abs(order[vT]-order[vB]);
-  if(diff===1){color+=12;reasons.push("명도 대비 12");}
-  else if(diff===0){color+=7;reasons.push("원톤 7");}
-  else {color+=9;reasons.push("명도차 9");}
+  if(diff===1){color+=9;reasons.push("명도 대비 9");}
+  else if(diff===0){color+=5;reasons.push("원톤 5");}
+  else {color+=7;reasons.push("명도차 7");}
+  // 신발 앵커: 신발 명도가 하의와 이어지면 다리선 연장(+3), 상의와 호응(+2), 그 외(+1)
+  if(shoe){
+    const vS=valueOf(shoe);
+    if(vS===vB){color+=3;reasons.push("신발-하의 연결 +3");}
+    else if(vS===vT){color+=2;reasons.push("신발-상의 호응 +2");}
+    else {color+=1;reasons.push("신발 중립 +1");}
+  }
   // 포인트 절제 8
   const vivids=[top,bottom,shoe].filter(Boolean).filter(isVivid).length;
   if(vivids<=1){color+=8;} else {color+=4;reasons.push("포인트 과다 4");}
@@ -371,10 +378,13 @@ function scoreCore(top,bottom,shoe){
   const sUniq=[...new Set(seasons)];
   if(sUniq.length===1){sm+=16;reasons.push("계절 일치 16");}
   else {sm+=13;reasons.push("ALL 혼합 13");}
-  // 소재 질감 12: 매트 베이스 + 가죽 신발
+  // 소재 질감 12: 가죽 12 / 올데님 9 / 러닝·기능화+단정상의 8 / 그 외 10
   const leatherShoe=shoe&&/가죽|leather|로퍼|구두|더비/i.test(_txt(shoe));
+  const runShoe=shoe&&/fresh foam|fuelcell|노바|슈퍼블라스트|860|1080|러닝|컴포트/i.test(_txt(shoe));
+  const dressTop=/셔츠|폴로|니트/.test(top.name||"")&&!/티셔츠/i.test(top.name||"");
   const allDenim=/데님/.test(top.material||"")&&/데님/.test(bottom.material||"");
   if(leatherShoe){sm+=12;reasons.push("질감 대비 12");}
+  else if(runShoe&&dressTop){sm+=8;reasons.push("기능화+단정상의 8");}
   else if(allDenim){sm+=9;reasons.push("올데님 9");}
   else {sm+=10;}
 
@@ -518,11 +528,19 @@ function buildCodis(items,w){
   };
 
   // ===== 상황(TPO)별 후보 풀 =====
-  // 셔츠/니트/폴로 등 단정한 상의 (티셔츠 제외, 헤비니트 제외, 더운 날엔 니트 제외)
+  // 날짜 시드: 같은 기온이라도 날마다 다른 선택이 나오도록
+  const DOY=(()=>{const d=new Date();return Math.floor((d-new Date(d.getFullYear(),0,0))/864e5);})();
+  // 셔츠/니트/폴로 등 단정한 상의 (온도 컷 적용, 티셔츠 제외, 더운 날엔 폴로·린넨 우선)
   const isDressTop=i=>{const n=i.name||"";return (/셔츠|폴로|옥스포드/.test(n)&&!/티셔츠|t셔츠/i.test(n))&&!isHeavy(i);};
-  const smartTops=tops.filter(isDressTop).concat(
-    t<26?tops.filter(i=>/니트/.test(i.name||"")&&!isHeavy(i)):[]
+  let smartTops=tops0.filter(isDressTop).concat(
+    t<26?tops0.filter(i=>/니트/.test(i.name||"")&&!isHeavy(i)):[]
   ).filter((v,idx,a)=>a.indexOf(v)===idx);
+  if(t>=26){ // 한여름: 반팔 폴로(카라티) 1순위 → 린넨 셔츠 2순위 → 그 외 (연간 가이드 반영)
+    const polos=tops0.filter(i=>subOf(i)==="카라티");
+    const linens=tops0.filter(i=>subOf(i)==="셔츠"&&/린넨|linen/i.test((i.material||"")+(i.name||"")));
+    smartTops=polos.concat(linens,smartTops).filter((v,idx,a)=>a.indexOf(v)===idx);
+  }
+  if(!smartTops.length)smartTops=tops.filter(isDressTop);
   // 깔끔한 신발(로퍼·구두·미니멀 스니커즈)
   const cleanShoes=shoes.filter(i=>/스탠 스미스|stan|삼바|samba|로퍼|구두|더비|996|992|990|998|2002/i.test(i.name||""));
   // 데님 중 다크 인디고 우선
@@ -562,7 +580,7 @@ function buildCodis(items,w){
 
   // 1 업무 (스마트 캐주얼 ~ 비즈니스)
   {
-    const s=t+REROLL[0];
+    const s=t+DOY+REROLL[0];
     const top=pick(smartTops.length?smartTops:wantTops,s);
     const bottom=pick(workBottoms.length?workBottoms:(chinos.length?chinos:bottoms0),s+1);
     const wShoes=cleanShoes.length?cleanShoes:(dressShoes.length?dressShoes:sneakers);
@@ -581,15 +599,17 @@ function buildCodis(items,w){
 
   // 2 데이트 (단정하면서 멋낸 스마트 캐주얼)
   {
-    const s=t+REROLL[1];
+    const s=t+DOY+REROLL[1];
     // 데이트: 깔끔한 셔츠·니트 + 다크 인디고 데님 우선 + 가죽/미니멀 스니커즈
-    const dTops=tops.filter(i=>(/셔츠|폴로/.test(i.name||"")&&!/티셔츠|t셔츠/i.test(i.name||""))&&!isHeavy(i)).concat(
-      t<26?tops.filter(i=>/니트/.test(i.name||"")&&!isHeavy(i)):[]
+    let dTops=tops0.filter(i=>(/셔츠|폴로/.test(i.name||"")&&!/티셔츠|t셔츠/i.test(i.name||""))&&!isHeavy(i)).concat(
+      t<26?tops0.filter(i=>/니트/.test(i.name||"")&&!isHeavy(i)):[]
     ).filter((v,idx,a)=>a.indexOf(v)===idx);
+    if(t>=26){const polos=tops0.filter(i=>subOf(i)==="카라티");dTops=polos.concat(dTops).filter((v,idx,a)=>a.indexOf(v)===idx);}
+    if(!dTops.length)dTops=smartTops;
     const dBottoms=(darkDenim.length?darkDenim:denim).filter(notWide);
     const dBottomsF=dBottoms.length?dBottoms:(denim.length?denim:bottoms0);
     const dShoes=cleanShoes.length?cleanShoes:sneakers;
-    const top=pick(dTops.length?dTops:wantTops,s+4);
+    const top=pick(dTops.length?dTops:wantTops,s+5);
     const bottom=pick(dBottomsF,s+5);
     const shoe=shoeForTPO(dShoes.length?dShoes:shoes0,s+6);
     // 데이트 향수: 우디·플로럴 계열 우선
@@ -606,7 +626,7 @@ function buildCodis(items,w){
   // 3 자유 (편한 캐주얼 · 비 오면 방수 우선)
   {
     let vibe,accent,slots;
-    const s=t+REROLL[2];
+    const s=t+DOY+REROLL[2];
     if(rain){
       const ws=shoes.filter(i=>/방수|gtx|고어|ecco/i.test((i.note||"")+(i.brand||"")));
       const top=pick(freeTops.length?freeTops:wantTops,s+8),bottom=pick(bottoms0.filter(i=>/다크|블랙|네이비|인디고/.test(i.color||"")),s)||pick(denim.length?denim:bottoms0,s+9);
@@ -665,8 +685,31 @@ function buildCodis(items,w){
         .concat(edgeItems.length?["온도 경계 "+edgeItems.join("·")+" −"+(edgeItems.length*3)]:[])
         .concat(seasonItems.length?["계절감 "+seasonItems.join("·")+" −"+(seasonItems.length*2)]:[]);
       c.grade=c.score>=90?"A":c.score>=75?"B":c.score>=60?"C":"X";
+      // 대안 상의 1종 함께 제안 (현재 상의 제외, 같은 조합에서 최고점)
+      if(c.slots.top){
+        let best=null,bestS=-1;
+        tops0.forEach(tp=>{
+          if(tp.code===c.slots.top.code)return;
+          const r=scoreCore(tp,c.slots.bottom,c.slots.shoe);
+          if(r&&!r.invalid&&r.total>bestS){bestS=r.total;best=tp;}
+        });
+        if(best)c.altTop={item:best,score:Math.round(bestS)};
+      }
     }
     else {c.score=null;c.grade=sc?"X":null;c.invalidReason=sc&&sc.reason;c.reasons=[];}
+  });
+  // 대안 상의: 같은 하의·신발 기준 차선 상의 계산 (지배적 상의 편중 완화)
+  R.forEach(c=>{
+    if(c.score==null||!c.slots.top)return;
+    const curRaw=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
+    let best=null,bestS=-1;
+    tops0.forEach(tp=>{
+      if(tp.code===c.slots.top.code)return;
+      if(c.slots.shirtLayer&&tp.code===c.slots.shirtLayer.code)return;
+      const sc=scoreCore(tp,c.slots.bottom,c.slots.shoe);
+      if(sc&&!sc.invalid&&sc.total>bestS){bestS=sc.total;best=tp;}
+    });
+    if(best&&curRaw&&!curRaw.invalid){c.altTop={item:best,delta:Math.round(bestS-curRaw.total)};}
   });
   // 상황(업무·데이트·자유) 고정 순서 유지 — 정렬하지 않음. 점수는 배지로만 표시.
   return R;
@@ -814,6 +857,7 @@ function applyOverrides(codis){
     Object.keys(ov).forEach(role=>{
       const it=ITEMS.find(i=>i.code===ov[role]);
       if(it)c.slots[role]=it;
+      if(role==="top")c.altTop=null; // 수동 교체 후엔 이전 대안 표시 제거
     });
     // 수정 시 핏/텍스처 가이드 재계산
     c.fit={top:fitGuide(c.slots.top,"top",WEATHER.high),bottom:fitGuide(c.slots.bottom,"bottom",WEATHER.high)};
@@ -879,8 +923,15 @@ function renderToday(){
         <span style="font-size:13.5px;font-weight:600;flex:1;min-width:0">${esc((p.brand?p.brand+" ":"")+p.name)}${p.color?`<span style="font-size:11.5px;color:var(--sub);font-weight:400"> · ${esc(p.color)}</span>`:""}</span>
         <button class="ghost" data-swap="${idx}:${role}" style="padding:3px 9px;font-size:11px;color:var(--sub);flex:0 0 auto" title="다른 ${ROLE_LABEL[role]}(으)로 교체">↻</button></div>`;
       fitTexts.forEach(ft=>{h+=`<div style="font-size:11px;color:${c.accent};margin:-2px 0 2px 42px">📐 ${esc(ft)}</div>`;});
+      // 대안 상의 제안 (현재 상의와 다른 최고점 후보)
+      if(role==="top"&&c.altTop){
+        h+=`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);margin:-1px 0 3px 42px">
+          <span>↔ 대안: ${esc((c.altTop.item.brand?c.altTop.item.brand+" ":"")+c.altTop.item.name)} · ${c.altTop.score}점</span>
+          <button class="ghost" data-alttop="${idx}" style="padding:2px 8px;font-size:10.5px;color:var(--ink);flex:0 0 auto">적용</button></div>`;
+      }
     });
     // 텍스처 믹스
+    if(c.altTop)h+=`<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--sub);margin-top:4px"><span>↔ 상의 대안:</span><span style="color:var(--ink)">${esc(c.altTop.item.name)}</span><span>(${c.altTop.delta>=0?"+":""}${c.altTop.delta}점)</span><button class="ghost" data-alttop="${idx}" style="margin-left:auto;padding:3px 9px;font-size:11px;color:var(--sub);flex:0 0 auto">적용</button></div>`;
     if(c.texture)h+=`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;padding-top:8px;border-top:1px dashed var(--line);line-height:1.5">🧵 ${esc(c.texture)}</div>`;
     // 액세서리 레이어드
     if(c.accessories&&c.accessories.length){
@@ -944,6 +995,21 @@ function bindCodiEdits(){
     render();
   }));
   // 전체 새로 (해당 코디 시드를 흔들어 새 조합 생성)
+  // 대안 상의 적용
+  view.querySelectorAll("[data-alttop]").forEach(b=>b.addEventListener("click",()=>{
+    const idx=+b.dataset.alttop;const c=CURRENT_CODIS[idx];if(!c||!c.altTop)return;
+    const origin=typeof c.origin==="number"?c.origin:idx;
+    CODI_OVERRIDES[origin]=CODI_OVERRIDES[origin]||{};CODI_OVERRIDES[origin].top=c.altTop.item.code;
+    render();
+  }));
+  // 대안 상의 적용
+  view.querySelectorAll("[data-alttop]").forEach(b=>b.addEventListener("click",()=>{
+    const idx=+b.dataset.alttop;const c=CURRENT_CODIS[idx];
+    if(!c||!c.altTop)return;
+    const origin=typeof c.origin==="number"?c.origin:idx;
+    CODI_OVERRIDES[origin]=CODI_OVERRIDES[origin]||{};CODI_OVERRIDES[origin].top=c.altTop.item.code;
+    render();
+  }));
   // 입었어요 토글 (7일간 이 조합 추천 제외)
   view.querySelectorAll("[data-worn]").forEach(b=>b.addEventListener("click",()=>{
     const idx=+b.dataset.worn;
