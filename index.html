@@ -735,6 +735,138 @@ function buildCodis(items,w){
   return R;
 }
 
+// ====== 가장 중요한 날 · 호감(첫인상) 베스트 코디 ======
+// 여러 사람을 만나 호감을 얻어야 하는 날: 단정함·청결감·신뢰감을 최우선으로
+// 단 하나의 코디를 조합 탐색으로 골라낸다. (scoreCore + 호감 가중)
+function impressionScore(top,bottom,shoe){
+  const sc=scoreCore(top,bottom,shoe);
+  if(!sc||sc.invalid)return null;
+  let bonus=0; const why=[];
+  const sub=subOf(top), tn=(top.name||"");
+  // 1) 단정한 상의 = 첫인상 신뢰감
+  if(sub==="셔츠"){bonus+=12;why.push("옥스포드·셔츠의 단정함이 첫인상 신뢰도를 높여요");}
+  else if(sub==="니트"){bonus+=10;why.push("니트의 부드러운 질감이 다가가기 쉬운 인상을 줘요");}
+  else if(sub==="카라티"){bonus+=9;why.push("폴로 카라가 예의 있고 깔끔한 느낌을 줘요");}
+  else if(sub==="맨투맨"){bonus+=3;}
+  else if(/그래픽/.test(tn)){bonus-=6;why.push("그래픽 티는 캐주얼해 첫 만남에는 절제하는 게 좋아요");}
+  // 2) 밝고 깨끗한 상의 톤 = 얼굴을 화사하게
+  if(/화이트|아이보리|크림/.test(top.color||"")){bonus+=6;why.push("밝은 상의가 얼굴을 화사하게 비춰 호감을 높여요");}
+  else if(/네이비|그레이|블루/.test(top.color||"")){bonus+=3;}
+  // 3) 단정한 하의
+  const darkIndigo=/다크인디고|다크 인디고/.test(bottom.color||"")||(/인디고/.test(bottom.color||"")&&valueOf(bottom)==="DARK");
+  if(/슬랙스/.test((bottom.name||"")+(bottom.material||""))){bonus+=7;why.push("슬랙스로 정돈된 실루엣과 격식을 더했어요");}
+  else if(darkIndigo){bonus+=6;why.push("다크 인디고 데님이 깔끔하고 단정한 하체 라인을 만들어요");}
+  else if(/치노|면바지/.test((bottom.name||"")+subOf(bottom))){bonus+=4;}
+  if(/와이드|릴렉스|loose|wide|relax|550|555|568/i.test((bottom.fit||"")+(bottom.name||"")))bonus-=3;
+  // 4) 깔끔한 신발
+  const sn=(shoe.name||"")+(shoe.note||"");
+  if(/로퍼|구두|더비/.test(sn)){bonus+=7;why.push("가죽 구두로 격식과 신뢰감을 완성했어요");}
+  else if(/삼바|스탠|스미스|samba|stan|핸드볼|스페지알/i.test(sn)){bonus+=6;why.push("미니멀 스니커즈로 과하지 않게 세련된 발끝");}
+  else if(/992|990|996|998|993|2002/.test(sn)){bonus+=3;}
+  else if(/노바|슈퍼블라스트|fresh foam|fuelcell|860|1080|러닝/i.test(sn))bonus-=3;
+  // 5) 안정적인 등급 가산 (호감엔 튀지 않는 완성도가 중요)
+  if(sc.grade==="A")bonus+=5; else if(sc.grade==="B")bonus+=2;
+  return {total:sc.total+bonus, base:sc.total, bonus, grade:sc.grade, why};
+}
+
+function buildBestCodi(items,w){
+  const t=w.high;
+  const C=c=>items.filter(i=>i.cat===c);
+  const isHeavy=i=>/울|캐시미어|니트/.test((i.material||"")+(i.name||""));
+  const okTemp=i=>tempFit(i,t)!=="out";
+  const fb=(arr,all)=>arr.length?arr:all;
+  const allT=C("TP"),allB=C("BT"),allS=C("SH"),allO=C("OT");
+  const tops=fb(allT.filter(okTemp),allT);
+  const bottoms=fb(allB.filter(okTemp),allB);
+  const shoes=fb(allS.filter(okTemp),allS);
+  const outers=allO.filter(okTemp);
+  const perfumes=C("PF"), accs=C("AC");
+  if(!tops.length||!bottoms.length||!shoes.length)return null;
+  // 후보 좁히기 (없으면 전체로 폴백)
+  const smartTops=fb(tops.filter(i=>{const s=subOf(i);return s==="셔츠"||s==="니트"||s==="카라티";}),tops);
+  const smartBottoms=fb(bottoms.filter(i=>{
+    const dark=/다크인디고|다크 인디고/.test(i.color||"")||(/인디고/.test(i.color||"")&&valueOf(i)==="DARK");
+    const slack=/슬랙스|치노|면바지/.test((i.name||"")+subOf(i));
+    const notWide=!/와이드|릴렉스|loose|wide|relax|550|555|568/i.test((i.fit||"")+(i.name||""));
+    return (dark||slack)&&notWide;
+  }),bottoms);
+  const cleanShoes=fb(shoes.filter(i=>/로퍼|구두|더비|삼바|스탠|스미스|samba|stan|핸드볼|스페지알|992|990|996|998|993|2002/i.test((i.name||"")+(i.note||""))),shoes);
+  let best=null;
+  smartTops.forEach(tp=>smartBottoms.forEach(bt=>cleanShoes.forEach(sh=>{
+    const r=impressionScore(tp,bt,sh);
+    if(!r)return;
+    let edge=0; [tp,bt,sh].forEach(it=>{if(tempFit(it,t)==="edge")edge-=3;});
+    const total=r.total+edge;
+    if(!best||total>best.total){best={top:tp,bottom:bt,shoe:sh,total,detail:r};}
+  })));
+  if(!best)return null;
+  // 아우터: 쌀쌀할 때만, 단정한 종류(블레이저>코트>자켓…) + 톤 정합 우선
+  let outer=null;
+  if(t<20){
+    const rank=i=>{const n=i.name||"";return /블레이저|blazer/.test(n)?5:/코트|coat|맥코트/.test(n)?4:/해링턴|자켓|트러커/.test(n)?3:/셔켓|셔츠자켓|오버셔츠/.test(n)?2:1;};
+    outer=outers.slice().sort((a,b)=>(rank(b)-rank(a))||(outerFit(best.top,b)-outerFit(best.top,a)))[0]||null;
+  }
+  const perfume=perfumes.find(p=>/우드|세이지|가이악|씨 솔트|플라워|wood|sage/i.test((p.name||"")+(p.brand||"")))||perfumes[0]||null;
+  const belt=accs.find(i=>/벨트|belt/i.test((i.name||"")))||null;
+  return {
+    slots:{outer,top:best.top,bottom:best.bottom,shoe:best.shoe},
+    score:Math.round(best.total), grade:best.detail.grade, baseScore:best.detail.base,
+    why:best.detail.why, perfume, belt,
+    fit:{top:fitGuide(best.top,"top",t),bottom:fitGuide(best.bottom,"bottom",t)},
+    texture:textureNote(best.top,best.bottom)
+  };
+}
+
+// 각 아이템의 '입는 법' 비고 (호감·첫인상 관점의 구체 지시)
+function styleNotes(item,role,t,hasBelt){
+  const out=[]; const n=(item.name||""), sub=subOf(item);
+  if(role==="outer"){
+    if(/블레이저|blazer/.test(n))out.push("단추는 하나만 잠가 격식 있게");
+    else if(/코트|coat|맥코트/.test(n))out.push("앞을 열어 자연스럽게 걸치기");
+    else out.push("앞 단추·지퍼는 열고 가볍게 걸치기");
+  }else if(role==="shirtLayer"){
+    out.push("소매 두 번 접기","풀아웃(밖으로 빼기)","단추 다 풀어 레이어드");
+  }else if(role==="top"){
+    if(sub==="셔츠"){out.push("앞만 살짝 넣는 프렌치 턱","소매 한 번 롤업","첫 단추만 풀어 여유 있게");}
+    else if(sub==="니트"){out.push("소매 살짝 걷어 손목 노출","안에 흰 티로 깔끔한 레이어드");}
+    else if(sub==="카라티"){out.push("카라는 세우지 말고 자연스럽게","앞만 살짝 프렌치 턱");}
+    else if(/반팔|tee|티셔츠/i.test(n)){out.push("프렌치 턱으로 비율 정리");}
+    else out.push("구김 없이 깔끔하게 정돈");
+  }else if(role==="bottom"){
+    if(t>=24)out.push("밑단 한 번 롤업해 발목 노출");
+    if(/슬랙스/.test(n+(item.material||"")))out.push("주름 없이 다려 단정하게");
+    if(hasBelt)out.push("벨트로 턱인 라인 강조");
+  }else if(role==="shoe"){
+    out.push("깨끗이 닦아 청결감 강조");
+    if(t>=24)out.push("발목 양말로 가볍게");
+  }else if(role==="perfume"){
+    out.push("손목·목에 은은하게 1~2번 (과하지 않게)");
+  }else if(role==="acc"){
+    out.push("브라운 톤으로 벨트·소품 통일감");
+  }
+  if(item.note&&role!=="perfume"&&role!=="acc")out.push(item.note);
+  return out;
+}
+
+// 베스트 코디 → 표(분류/코드명/아이템/색상/비고) 행 배열
+function bestCodiRows(best,t){
+  const rows=[]; const hasBelt=!!best.belt;
+  const push=(role,label,item,fitArr)=>{
+    if(!item)return;
+    let notes=styleNotes(item,role,t,hasBelt);
+    if(fitArr)notes=notes.concat(fitArr);
+    rows.push({cat:label,code:item.code||"—",brand:item.brand||"",name:item.name||"",color:item.color||"—",notes:[...new Set(notes)].filter(Boolean).join(", ")||"—"});
+  };
+  push("outer","아우터",best.slots.outer);
+  const topLabel=(()=>{const s=subOf(best.slots.top);return s==="셔츠"?"셔츠":s==="니트"?"니트":s==="카라티"?"폴로":"상의";})();
+  push("top",topLabel,best.slots.top,best.fit.top||[]);
+  push("bottom","하의",best.slots.bottom,best.fit.bottom||[]);
+  push("shoe","신발",best.slots.shoe);
+  if(best.belt)push("acc","소품",best.belt);
+  if(best.perfume)push("perfume","향수",best.perfume);
+  return rows;
+}
+
 // 코디의 slots → 표시용 pieces 배열
 function codiPieces(c){
   return [c.slots.outer,c.slots.top,c.slots.bottom,c.slots.shoe].filter(Boolean);
@@ -754,6 +886,9 @@ function altPool(role,items,w){
 let FORECAST=null;        // 7일 예보 배열 [{date,high,low,code,rainProb}]
 let SELECTED_DATE=null;   // 사용자가 고른 날짜 (없으면 오늘)
 let MANUAL=null;          // 수동 설정 {high,low,cond,rain} (있으면 예보 무시)
+// ===== 가장 중요한 날 =====
+const IMP_KEY="codi:importantDate:v1";
+let IMPORTANT_DATE=(function(){try{return localStorage.getItem(IMP_KEY)||null;}catch(e){return null;}})();
 
 async function fetchWeather(){
   try{
@@ -826,6 +961,15 @@ function dayLabel(dateStr,idx){
   if(idx===1)return"내일 "+md;
   return wk[d.getDay()]+" "+md;
 }
+// 예보 인덱스에 상관없이 날짜 문자열 → 사람이 읽는 라벨
+function niceDayLabel(dateStr){
+  if(!dateStr)return"";
+  const idx=FORECAST?FORECAST.findIndex(f=>f.date===dateStr):-1;
+  if(idx>=0)return dayLabel(dateStr,idx);
+  const wk=["일","월","화","수","목","금","토"];
+  const d=new Date(dateStr+"T00:00:00");
+  return wk[d.getDay()]+"요일 "+(d.getMonth()+1)+"/"+d.getDate();
+}
 
 const COND_OPTIONS=[["맑음",false],["대체로 맑음",false],["흐림",false],["비",true],["눈",true],["뇌우",true]];
 
@@ -838,9 +982,16 @@ function renderWeatherPanel(){
       <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:${manualOn?"14px":"4px"}">`;
     FORECAST.forEach((f,idx)=>{
       const on=!manualOn&&f.date===SELECTED_DATE;
-      h+=`<button class="chip ${on?"on":""}" data-date="${f.date}" style="flex:0 0 auto;white-space:nowrap">${dayLabel(f.date,idx)} · ${f.high}°</button>`;
+      const star=IMPORTANT_DATE===f.date?"⭐ ":"";
+      h+=`<button class="chip ${on?"on":""}" data-date="${f.date}" style="flex:0 0 auto;white-space:nowrap">${star}${dayLabel(f.date,idx)} · ${f.high}°</button>`;
     });
     h+=`</div>`;
+    // 가장 중요한 날 설정
+    const impOn=IMPORTANT_DATE&&IMPORTANT_DATE===SELECTED_DATE;
+    h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 ${manualOn?"14px":"2px"}">
+      <button class="chip ${impOn?"on":""}" id="imp-toggle" style="flex:0 0 auto;background:${impOn?"#e0b74e":"var(--panel2)"};color:${impOn?"#1a1a1a":"var(--sub)"}">${impOn?"⭐ 가장 중요한 날 · 해제":"☆ 이 날을 가장 중요한 날로"}</button>
+      <span style="font-size:11px;color:var(--sub)">${impOn?"호감 베스트 코디를 위에 추천했어요":(IMPORTANT_DATE?"현재 지정: "+esc(niceDayLabel(IMPORTANT_DATE)):"중요한 약속이 있는 날을 골라 설정하세요")}</span>
+    </div>`;
   }else{
     h+=`<div style="font-size:12px;color:var(--sub);margin-bottom:10px">예보를 불러오지 못했어요. 아래에서 직접 설정하세요.</div>`;
   }
@@ -909,6 +1060,56 @@ function renderToday(){
       <input type="checkbox" id="tpo-biz" ${TPO.biz?"checked":""}> 비즈니스 캐주얼 변주 (블레이저 추가)</label>
   </div>`;
   h+=`<div style="font-size:13.5px;color:var(--sub);margin-bottom:14px;line-height:1.6">${WEATHER.manual?"":esc(subj)} <b style="color:var(--ink)">${esc(WEATHER.cond)} · 최고 ${WEATHER.high}° / 최저 ${WEATHER.low}°</b>${WEATHER.manual?" 기준입니다.":" 입니다."} ${note}</div>`;
+  // ===== 가장 중요한 날 · 호감 베스트 코디 (표) =====
+  const isImportantDay=IMPORTANT_DATE&&SELECTED_DATE===IMPORTANT_DATE;
+  const best=isImportantDay?buildBestCodi(ITEMS,WEATHER):null;
+  if(isImportantDay){
+    if(best){
+      const rows=bestCodiRows(best,WEATHER.high);
+      const gcolor=best.grade==="A"?"#1f7a4d":best.grade==="B"?"#8a6d1f":"#7a3b1f";
+      h+=`<div class="card" style="padding:18px;margin-bottom:16px;border:1px solid #e0b74e;border-left:4px solid #e0b74e;background:linear-gradient(180deg,#221d12 0%,var(--panel) 62%)">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:1px;color:#e6c25e">⭐ 가장 중요한 날</span>
+          <span style="font-size:11.5px;color:var(--sub)">${esc(niceDayLabel(IMPORTANT_DATE))} · 호감 베스트 코디</span>
+          ${best.grade&&best.grade!=="X"?`<span style="margin-left:auto;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:${gcolor};color:#fff">${best.grade} ${best.score}점</span>`:""}
+        </div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:2px">첫인상으로 호감을 얻는 단 하나의 코디</div>
+        <div style="font-size:12.5px;color:var(--sub);line-height:1.6;margin-bottom:12px">여러 사람을 만나 좋은 인상을 남겨야 하는 날. 단정함·청결감·신뢰감을 최우선으로 골랐어요.</div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px">
+          <thead><tr style="text-align:left;color:#e6c25e">
+            <th style="padding:7px 8px;border-bottom:1px solid #e0b74e55;white-space:nowrap">분류</th>
+            <th style="padding:7px 8px;border-bottom:1px solid #e0b74e55;white-space:nowrap">코드명</th>
+            <th style="padding:7px 8px;border-bottom:1px solid #e0b74e55">아이템</th>
+            <th style="padding:7px 8px;border-bottom:1px solid #e0b74e55;white-space:nowrap">색상</th>
+            <th style="padding:7px 8px;border-bottom:1px solid #e0b74e55">비고</th>
+          </tr></thead>
+          <tbody>`;
+      rows.forEach(r=>{
+        h+=`<tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:7px 8px;font-weight:700;color:var(--ink);white-space:nowrap;vertical-align:top">${esc(r.cat)}</td>
+          <td style="padding:7px 8px;color:var(--sub);white-space:nowrap;vertical-align:top">${esc(r.code)}</td>
+          <td style="padding:7px 8px;font-weight:600;vertical-align:top">${esc((r.brand?r.brand+" ":"")+r.name)}</td>
+          <td style="padding:7px 8px;color:var(--sub);white-space:nowrap;vertical-align:top">${esc(r.color)}</td>
+          <td style="padding:7px 8px;color:var(--sub);line-height:1.5;vertical-align:top">${esc(r.notes)}</td>
+        </tr>`;
+      });
+      h+=`</tbody></table></div>`;
+      if(best.why&&best.why.length){
+        h+=`<div style="margin-top:13px;padding-top:11px;border-top:1px dashed #e0b74e44">
+          <div style="font-size:11.5px;font-weight:800;color:#e6c25e;margin-bottom:6px">왜 이 코디일까요? · 호감 포인트</div>`;
+        best.why.slice(0,4).forEach(x=>{h+=`<div style="font-size:12px;color:var(--ink);line-height:1.55;margin-bottom:4px">· ${esc(x)}</div>`;});
+        h+=`</div>`;
+      }
+      if(best.texture)h+=`<div style="font-size:11.5px;color:var(--sub);margin-top:9px;line-height:1.5">🧵 ${esc(best.texture)}</div>`;
+      h+=`</div>`;
+    }else{
+      h+=`<div class="card" style="padding:16px;margin-bottom:16px;border-left:4px solid #e0b74e">
+        <div style="font-size:12px;font-weight:800;color:#e6c25e;margin-bottom:4px">⭐ 가장 중요한 날 · ${esc(niceDayLabel(IMPORTANT_DATE))}</div>
+        <div style="font-size:12.5px;color:var(--sub);line-height:1.6">옷장에 단정한 상·하의·신발이 부족해 베스트 코디를 만들지 못했어요. 셔츠·슬랙스·깔끔한 신발을 추가해 주세요.</div>
+      </div>`;
+    }
+  }
   // 이달의 가이드 룩 (연간 스타일링 가이드)
   const mg=MONTHLY_GUIDE[new Date().getMonth()+1];
   if(mg)h+=`<div class="card" style="padding:13px 15px;margin-bottom:14px;border-left:3px solid #b8935f">
@@ -916,6 +1117,7 @@ function renderToday(){
     <div style="font-size:13px;font-weight:600;line-height:1.5;margin-bottom:3px">${esc(mg.combo)}</div>
     <div style="font-size:11.5px;color:var(--sub);line-height:1.5">💡 ${esc(mg.point)}</div>
   </div>`;
+  if(isImportantDay&&best)h+=`<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px"><span style="flex:1;height:1px;background:var(--line)"></span><span style="font-size:11px;color:var(--sub);font-weight:600;white-space:nowrap">상황별 참고 코디</span><span style="flex:1;height:1px;background:var(--line)"></span></div>`;
   h+=`<div style="display:grid;gap:14px">`;
 
   codis.forEach((c,idx)=>{
@@ -1114,6 +1316,13 @@ function bindWeatherPanel(){
   view.querySelectorAll("[data-date]").forEach(b=>b.addEventListener("click",()=>{
     SELECTED_DATE=b.dataset.date; MANUAL=null; applyWeather();
   }));
+  // 가장 중요한 날 토글
+  const impBtn=document.getElementById("imp-toggle");
+  if(impBtn)impBtn.addEventListener("click",()=>{
+    IMPORTANT_DATE=(IMPORTANT_DATE===SELECTED_DATE)?null:SELECTED_DATE;
+    try{IMPORTANT_DATE?localStorage.setItem(IMP_KEY,IMPORTANT_DATE):localStorage.removeItem(IMP_KEY);}catch(e){}
+    CODI_OVERRIDES={}; applyWeather();
+  });
   // 수동 토글
   const mt=document.getElementById("w-manual");
   if(mt)mt.addEventListener("change",()=>{
