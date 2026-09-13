@@ -22,8 +22,8 @@
   .sub{font-size:13px;color:var(--sub);margin-top:3px}
   .row{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
   button{cursor:pointer;border:none;font:inherit;transition:all .15s}
-  .tabs{display:flex;gap:6px;margin-top:16px}
-  .tab{padding:10px 16px;border-radius:10px;background:transparent;color:var(--sub);font-weight:600;font-size:14px}
+  .tabs{display:flex;gap:5px;margin-top:16px;flex-wrap:wrap}
+  .tab{padding:9px 12px;border-radius:10px;background:transparent;color:var(--sub);font-weight:600;font-size:13px}
   .tab.on{background:var(--panel2);color:var(--ink)}
   .body{padding:18px}
   .wbadge{background:var(--panel2);border:1px solid var(--line);border-radius:12px;
@@ -62,6 +62,8 @@
     </div>
     <div class="tabs">
       <button class="tab on" data-tab="today">오늘 코디</button>
+      <button class="tab" data-tab="panel">전문가 회의</button>
+      <button class="tab" data-tab="records">기록</button>
       <button class="tab" data-tab="closet">옷장</button>
       <button class="tab" data-tab="add">추가</button>
     </div>
@@ -134,7 +136,7 @@ const SEED=[
 {code:"TP010",cat:"TP",brand:"Uniqlo",name:"심리스 티셔츠",color:"베이지",pattern:"솔리드",note:"비침 방지 이너"},
 {code:"TP011",cat:"TP",brand:"마뗑킴",name:"APPLIQUE FELT LOGO TOP",size:"M",color:"아이보리",date:"2026-04-30"},
 {code:"TP012",cat:"TP",brand:"브론슨",name:"Tompkins Loopwheeled Tee",size:"XXL",color:"MELANGE",date:"2026-04-30"},
-{code:"TP013",cat:"TP",brand:"페이퍼보이",name:"샌프란시스코 91 반팔티",size:"XL",color:"오트밀",date:"2026-04-30"},
+{code:"TP013",cat:"TP",brand:"페이퍼보이",name:"샌프란시스코 91 반팔티",size:"XL",color:"오트밀",use:"홈웨어",note:"집에서만 착용 · 외출 코디 추천 제외",date:"2026-04-30"},
 {code:"BT001",cat:"BT",brand:"Levi's",name:"550™",size:"32x30",color:"인디고",fit:"릴렉스",material:"데님",note:"여유로운 와이드 스트레이트"},
 {code:"BT002",cat:"BT",brand:"Levi's",name:"555™",size:"32x30",fit:"와이드",material:"데님",note:"밑단 넓음"},
 {code:"BT003",cat:"BT",brand:"Levi's",name:"501® 오리지널 RIGID",size:"35x32",color:"인디고",fit:"스트레이트",material:"데님",note:"근본 스트레이트"},
@@ -186,7 +188,7 @@ const SEED=[
 {code:"SH033",cat:"SH",brand:"Asics",name:"슈퍼블라스트 2",size:"280~285",note:"퍼포먼스 러닝"},
 {code:"SH034",cat:"SH",brand:"아디다스",name:"삼바 데콘 IF0641",size:"270",color:"블랙",price:"77,730",date:"2026-05-25"},
 {code:"SH035",cat:"SH",brand:"Ecco",name:"하이브리드 컴포트화",size:"270~275",material:"가죽",note:"GTX 방수"},
-{code:"AC001",cat:"AC",brand:"",name:"Leather Braid Belt",color:"브라운",material:"가죽",note:"위빙 벨트 · 턱인 코디"},
+{code:"AC001",cat:"AC",brand:"Levi's",name:"Leather Braid Belt",color:"다크 브라운",material:"위빙 가죽",note:"캐주얼 · 데님 · 턱인 코디"},
 {code:"PF001",cat:"PF",brand:"Nonfiction",name:"가이악 플라워",note:"우디+꽃향 · 마무리 필수"},
 {code:"PF002",cat:"PF",brand:"Jo Malone",name:"우드 세이지 앤 씨 솔트 외",note:"보유 중"},
 {code:"PF003",cat:"PF",brand:"Tom Ford",name:"OUD WOOD",note:"보유 중"},
@@ -196,7 +198,63 @@ const SEED=[
 
 // ====== 저장 ======
 const KEY="codi:wardrobe:v1";
-function load(){try{const r=localStorage.getItem(KEY);if(r){const p=JSON.parse(r);if(Array.isArray(p)&&p.length)return p;}}catch(e){}return SEED.slice();}
+const REQUIRED_ITEMS=[
+  {
+    code:"BT033",cat:"BT",sub:"청바지",brand:"PLAC",name:"Straight Selvedge B32 Raw",
+    color:"딥 인디고",fit:"여유 있는 스트레이트",material:"코튼 100% · 15.5oz 셀비지 데님",
+    note:"린스드 워시 · 신발을 살짝 덮는 긴 기장 · 레드/화이트 셀비지 디테일",
+    tmin:8,tmax:23,season:["봄","가을"],date:"2026-09-06"
+  },
+  {
+    code:"AC002",cat:"AC",sub:"벨트",brand:"",name:"Natural Grain Leather Belt",
+    color:"브라운",material:"내추럴 그레인 가죽",note:"치노 · 데저트 부츠 · 부드러운 캐주얼"
+  },
+  {
+    code:"AC003",cat:"AC",sub:"벨트",brand:"Giordano",name:"Bridle Leather Belt",
+    color:"레드 브라운",material:"브라이들 가죽",note:"셔츠 · 슬랙스 · 스마트 캐주얼"
+  }
+];
+function mergeRequired(items){
+  const out=items.slice();let changed=false;
+  const oversizedIndex=out.findIndex(item=>item.code==="TP031");
+  if(oversizedIndex>=0&&out[oversizedIndex].fit!=="오버사이즈"){
+    const current=out[oversizedIndex];
+    out[oversizedIndex]={...current,fit:"오버사이즈",note:[current.note,"풀아웃 또는 셔츠 아우터 연출 권장"].filter(Boolean).join(" · ")};
+    changed=true;
+  }
+  const homewearIndex=out.findIndex(i=>i.code==="TP013");
+  if(homewearIndex>=0&&out[homewearIndex].use!=="홈웨어"){
+    const current=out[homewearIndex];
+    out[homewearIndex]={...current,use:"홈웨어",note:[current.note,"집에서만 착용 · 외출 코디 추천 제외"].filter(Boolean).join(" · ")};
+    changed=true;
+  }
+  for(const required of REQUIRED_ITEMS){
+    const exists=out.some(i=>{
+      if(i.cat!==required.cat)return false;
+      if(i.code===required.code)return true;
+      const text=((i.brand||"")+" "+(i.name||"")+" "+(i.material||"")+" "+(i.note||"")).toLowerCase();
+      if(required.code==="BT033")return /straight selvedge b32 raw|스트레이트 셀비지 b32/.test(text);
+      if(required.code==="AC002")return /natural grain|내추럴 그레인/.test(text);
+      if(required.code==="AC003")return /bridle|브라이들/.test(text);
+      return false;
+    });
+    if(exists)continue;
+    let code=required.code;
+    if(out.some(i=>i.code===code)){
+      const nums=out.filter(i=>i.cat===required.cat).map(i=>parseInt(String(i.code||"").slice(2),10)).filter(Number.isFinite);
+      code=required.cat+String((nums.length?Math.max(...nums):32)+1).padStart(3,"0");
+    }
+    out.push({...required,code});changed=true;
+  }
+  return{items:out,changed};
+}
+function load(){
+  let base=SEED.slice();
+  try{const r=localStorage.getItem(KEY);if(r){const p=JSON.parse(r);if(Array.isArray(p)&&p.length)base=p;}}catch(e){}
+  const merged=mergeRequired(base);
+  if(merged.changed){try{localStorage.setItem(KEY,JSON.stringify(merged.items));}catch(e){}}
+  return merged.items;
+}
 function save(items){try{localStorage.setItem(KEY,JSON.stringify(items));return true;}catch(e){alert("저장 공간이 가득 찼어요. 사진은 용량을 많이 차지해요. 사진 일부를 삭제하거나, 텍스트는 CSV로 내보내 백업해 주세요.");return false;}}
 let ITEMS=load();
 let WEATHER={high:31,low:19,cond:"맑음",rain:false,date:new Date().toISOString().slice(0,10),loading:true};
@@ -424,7 +482,7 @@ function scoreCore(top,bottom,shoe){
 
   const total=base+pref;
   let grade= total>=90?"A":total>=75?"B":total>=60?"C":"X";
-  return {invalid:false,base:Math.round(base),pref,total:Math.round(total),grade,reasons};
+  return {invalid:false,base:Math.round(base),pref,total:Math.round(total),grade,reasons,comps:{color,sm,sil,form}};
 }
 
 // 아우터 정합 점수 (톤 일치/뉴트럴 우선) — 후보 정렬용
@@ -504,9 +562,11 @@ function textureNote(top,bottom){
   return null;
 }
 
+let ACCESSORY_REFRESHER=null;
 function buildCodis(items,w){
   const t=w.high,rain=w.rain;
-  const C=c=>items.filter(i=>i.cat===c);
+  const wearable=items.filter(i=>useOf(i)!=="홈웨어");
+  const C=c=>wearable.filter(i=>i.cat===c);
   const outers=C("OT"),tops=C("TP"),bottoms=C("BT"),shoes=C("SH"),perfumes=C("PF"),accs=C("AC");
   const isHeavy=i=>/울|캐시미어|니트/.test((i.material||"")+(i.name||""));
   const isShort=i=>/반팔|tee|크루넥|오버사이즈 t|티셔츠/i.test(i.name||"")||/릴렉스/.test(i.fit||"");
@@ -583,18 +643,78 @@ function buildCodis(items,w){
     return bagsMsg[0]||bagsTote[0]||null;
   }
 
-  function accessoryLayer(style){
+  // ===== 벨트 선택: 신발 색 → 하의 색 → 소재 격식 → 추천 내 로테이션 순으로 평가 =====
+  // 예전처럼 belts[0]을 고정 사용하지 않고, 옷장에 저장된 모든 벨트를 후보로 삼는다.
+  const beltUsage=new Map();
+  const itemText=i=>((i?.brand||"")+" "+(i?.name||"")+" "+(i?.color||"")+" "+(i?.material||"")+" "+(i?.note||"")).toLowerCase();
+  function colorFamily(i){
+    const x=itemText(i);
+    if(/블랙|검정|black/.test(x))return"black";
+    if(/레드\s*브라운|적갈|버건디|옥스블러드|oxblood|burgundy/.test(x))return"redBrown";
+    if(/다크\s*브라운|진갈|초코|dark\s*brown/.test(x))return"darkBrown";
+    if(/clarks|클락스|desert\s*boot|데저트\s*부츠/.test(x))return"brown";
+    if(/브라운|갈색|brown|탄\b|tan\b|코냑|cognac|카멜/.test(x))return"brown";
+    if(/아이보리|크림|베이지|에크루|white|cream|beige/.test(x))return"light";
+    if(/그레이|회색|grey|gray/.test(x))return"grey";
+    if(/네이비|인디고|navy|indigo|블루|blue/.test(x))return"navy";
+    if(/그린|올리브|세이지|green|olive|sage/.test(x))return"green";
+    return"neutral";
+  }
+  function beltScore(belt,slots,style){
+    const bf=colorFamily(belt),sf=colorFamily(slots.shoe),df=colorFamily(slots.bottom);
+    const bt=itemText(belt),st=itemText(slots.shoe);
+    let score=0;
+
+    // 1. 신발과의 연결 — 검정 가죽화는 검정 벨트, 브라운 계열 신발은 브라운 계열 우선
+    if(sf==="black")score+=bf==="black"?9:bf==="darkBrown"?2:-2;
+    else if(sf==="brown")score+=["brown","redBrown","darkBrown"].includes(bf)?(bf==="brown"?7:5):bf==="black"?-2:0;
+    else if(["light","grey","navy","green","neutral"].includes(sf)){
+      // 뉴트럴 스니커즈는 하의가 벨트 색을 결정한다.
+      if(["navy","black"].includes(df))score+=bf==="darkBrown"?6:bf==="redBrown"?5:bf==="black"?4:bf==="brown"?3:0;
+      else if(df==="light")score+=bf==="brown"?6:bf==="redBrown"?5:bf==="darkBrown"?4:bf==="black"?1:0;
+      else score+=["brown","redBrown","darkBrown","black"].includes(bf)?3:0;
+    }
+
+    // 2. 소재와 격식 — 브라이들은 셔츠/슬랙스, 위빙은 데님/스니커즈, 그레인은 치노/부츠에 강점
+    const isDressShoe=/로퍼|더비|구두|드레스|loafer|derby|dress/.test(st);
+    const isSneaker=/스니커|삼바|samba|뉴발란스|new balance|996|992|990|993|2002|ecco|에코/.test(st);
+    const isBridle=/브라이들|bridle/.test(bt),isBraid=/브레이드|위빙|braid|woven/.test(bt),isGrain=/그레인|grain/.test(bt);
+    if(isDressShoe){score+=isBridle?4:isGrain?2:isBraid?-2:1;}
+    else if(isSneaker){score+=isBraid?3:isGrain?2:isBridle?1:0;}
+    else if(/부츠|boot/.test(st)){score+=isGrain?4:isBridle?2:isBraid?1:0;}
+    if(style==="biz")score+=isBridle?3:isGrain?2:isBraid?0:1;
+    else if(style==="minimal")score+=isBridle||isGrain?2:isBraid?1:0;
+    else score+=isBraid?3:isGrain?2:0;
+
+    // 3. 같은 화면의 세 코디에서 한 벨트가 독점하지 않도록 강한 로테이션 페널티
+    score-=(beltUsage.get(belt.code)||0)*6;
+    return score;
+  }
+  function beltForOutfit(slots,style){
+    if(!belts.length||!slots?.bottom)return null;
+    const tt=itemText(slots.top);
+    const likelyHidden=style==="casual"&&/그래픽|오버사이즈|릴렉스|반팔|tee|티셔츠/.test(tt)&&!/셔츠|폴로/.test(tt);
+    if(likelyHidden)return null; // 풀아웃 상의라 벨트가 보이지 않으면 억지로 추천하지 않음
+    const belt=belts.slice().sort((a,b)=>beltScore(b,slots,style)-beltScore(a,slots,style)||String(a.code).localeCompare(String(b.code)))[0];
+    if(belt)beltUsage.set(belt.code,(beltUsage.get(belt.code)||0)+1);
+    return belt||null;
+  }
+  function accessoryLayer(style,slots){
     // 실제 보유 우선, 없으면 placeholder(제안 틀)
     const out=[];
     if(style==="minimal"||style==="biz"){
       out.push(watches[0]||{placeholder:"가죽 스트랩 시계 — '준비된 룩'의 완성"});
       if(bracelets[0])out.push(bracelets[0]); else if(style==="minimal")out.push({placeholder:"실버 체인 팔찌 (선택)"});
-    }else{
-      if(watches[0])out.push(watches[0]);
-    }
-    if(belts[0]&&style!=="casual")out.push(belts[0]);
+    }else if(watches[0])out.push(watches[0]);
+    const belt=beltForOutfit(slots,style);
+    if(belt)out.push(belt);
     return out;
   }
+  ACCESSORY_REFRESHER=codis=>{
+    beltUsage.clear();
+    codis.forEach(c=>{c.accessories=accessoryLayer(c.style,c.slots);});
+    return codis;
+  };
 
   const R=[];
 
@@ -611,7 +731,7 @@ function buildCodis(items,w){
     R.push({title:"업무",vibe:"단정한 스마트 캐주얼 · 출근·미팅",accent:"#4a5a7a",style:"biz",
       slots:{outer:t>=26?null:wOuter,shirtLayer:wLayer,top,bottom,shoe},
       perfume:pick(perfumes.filter(p=>/우드|세이지|페어|wood|sage/i.test((p.name||"")+(p.brand||""))).length?perfumes.filter(p=>/우드|세이지|페어|wood|sage/i.test((p.name||"")+(p.brand||""))):perfumes,s),
-      accessories:accessoryLayer("biz"),
+      accessories:accessoryLayer("biz",{outer:wOuter,shirtLayer:wLayer,top,bottom,shoe}),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
       fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
@@ -637,7 +757,7 @@ function buildCodis(items,w){
     R.push({title:"데이트",vibe:"단정하면서 멋낸 스마트 캐주얼",accent:"#7a4a6b",style:"minimal",
       slots:{outer:t<26?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe},
       perfume:pick(dPerf.length?dPerf:perfumes,s+1),
-      accessories:accessoryLayer("minimal"),
+      accessories:accessoryLayer("minimal",{outer:t<26?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe}),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
       fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
@@ -661,7 +781,7 @@ function buildCodis(items,w){
     // 자유: 셔츠 레이어 적극 시도 (그래픽티 위에 데님/체크 셔츠)
     slots.shirtLayer=pickShirtLayer(slots.top,s+13);
     R.push({title:"자유",vibe,accent,style:"casual",slots,perfume:pick(perfumes,s+2),
-      accessories:accessoryLayer("casual"),bag:bagSuggest(),
+      accessories:accessoryLayer("casual",slots),bag:bagSuggest(),
       texture:textureNote(slots.top,slots.bottom),
       fit:{top:fitGuide(slots.top,"top",t),bottom:fitGuide(slots.bottom,"bottom",t)}});
   }
@@ -683,6 +803,8 @@ function buildCodis(items,w){
       }
     }
   });
+  // 최근 착용 회피로 하의나 신발이 교체됐을 수 있으므로 최종 슬롯 기준으로 벨트를 다시 계산한다.
+  ACCESSORY_REFRESHER(R);
   // v3 점수화: 각 코디에 점수·등급·근거 부여 (+ 온도 적합도 반영)
   R.forEach(c=>{
     const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
@@ -741,13 +863,464 @@ function codiPieces(c){
 }
 // 특정 역할의 대체 아이템 풀
 function altPool(role,items,w){
-  const C=c=>items.filter(i=>i.cat===c);
+  const wearable=items.filter(i=>useOf(i)!=="홈웨어");
+  const C=c=>wearable.filter(i=>i.cat===c);
   if(role==="outer")return C("OT");
-  if(role==="shirtLayer")return items.filter(i=>i.cat==="TP"&&/셔츠|체크|플란넬|옥스포드/.test(i.name||"")&&!/티셔츠|t셔츠/i.test(i.name||""));
+  if(role==="shirtLayer")return wearable.filter(i=>i.cat==="TP"&&/셔츠|체크|플란넬|옥스포드/.test(i.name||"")&&!/티셔츠|t셔츠/i.test(i.name||""));
   if(role==="top")return C("TP");
   if(role==="bottom")return C("BT");
   if(role==="shoe")return C("SH");
   return [];
+}
+
+// ====== 코디 기록 (일별 확정 · 평가 · 학습) ======
+const REC_KEY="codi:records:v1";
+function loadRecs(){try{return JSON.parse(localStorage.getItem(REC_KEY)||"[]");}catch(e){return[];}}
+function saveRecs(list){try{localStorage.setItem(REC_KEY,JSON.stringify(list));return true;}catch(e){alert("저장 공간이 가득 찼어요. 기록 사진 일부를 삭제해 주세요.");return false;}}
+function recForDate(date){return loadRecs().find(r=>r.date===date)||null;}
+function upsertRec(rec){const list=loadRecs().filter(r=>r.date!==rec.date);list.push(rec);list.sort((a,b)=>a.date<b.date?-1:1);return saveRecs(list);}
+function deleteRec(date){saveRecs(loadRecs().filter(r=>r.date!==date));}
+function updateRec(date,fn){const list=loadRecs();const r=list.find(x=>x.date===date);if(!r)return;fn(r);saveRecs(list);}
+function itemByCode(code){return ITEMS.find(i=>i.code===code)||null;}
+function itemLabel(code){const i=itemByCode(code);return i?((i.brand?i.brand+" ":"")+i.name):code;}
+
+// ===== 별점 학습: 평가 기반 아이템 경험치 보정 (−4 ~ +4) =====
+let BOOSTS={},PANEL_RECSTATS={n:0,rated:0};
+function refreshBoosts(){
+  const recs=loadRecs();
+  PANEL_RECSTATS={n:recs.length,rated:recs.filter(r=>r.rating).length};
+  const m={};
+  recs.forEach(r=>{if(!r.rating)return;(r.codes||[]).forEach(cd=>{(m[cd]=m[cd]||[]).push(r.rating);});});
+  BOOSTS={};
+  Object.keys(m).forEach(cd=>{
+    const arr=m[cd],avg=arr.reduce((a,b)=>a+b,0)/arr.length;
+    BOOSTS[cd]=Math.round((avg-3)*2*Math.min(1,arr.length/3)*10)/10;
+  });
+}
+function itemBoost(code){return BOOSTS[code]||0;}
+
+// ====== 전문가 패널 (코디네이터 총괄 디자이너) ======
+// 5인의 하위 디자이너가 각자 관점으로 채점·코멘트 → 총괄이 가중 합의로 최종 1벌 결정
+const EXPERT_DEFS=[
+ {id:"color",icon:"🎨",name:"채하린",role:"컬러리스트",w:.25,
+  eval(c){
+    const sc=Math.max(0,Math.min(100,Math.round(c.sc.comps.color/38*100)));
+    const tones=[toneOf(c.slots.top),toneOf(c.slots.bottom)].concat(c.slots.shoe?[toneOf(c.slots.shoe)]:[]);
+    const uniq=[...new Set(tones)];
+    let cm;
+    if(uniq.length===1)cm="톤이 "+(uniq[0]==="COOL"?"쿨":uniq[0]==="WARM"?"웜":"뉴트럴")+" 하나로 정리돼 안정적인 배색이에요.";
+    else if(tones.includes("COOL")&&tones.includes("WARM"))cm=tones.includes("NEUTRAL")?"쿨·웜이 섞였지만 뉴트럴이 사이에서 완충해 줘요.":"쿨·웜 톤이 부딪혀요 — 화이트나 그레이 아이템으로 완충하면 좋아요.";
+    else cm="근접 톤 배색이라 자연스럽게 이어져요.";
+    if(c.slots.shoe&&valueOf(c.slots.shoe)===valueOf(c.slots.bottom))cm+=" 신발이 하의 명도를 이어받아 다리 선이 길어 보여요.";
+    return{score:sc,comment:cm};
+  }},
+ {id:"season",icon:"🧵",name:"한결",role:"소재·계절 전문가",w:.2,
+  eval(c){
+    let sc=Math.round(c.sc.comps.sm/28*100);const edges=[];
+    ["top","bottom","shoe","outer"].forEach(r=>{const it=c.slots[r];if(it&&tempFit(it,c.t)==="edge"){edges.push(ROLE_LABEL[r]);sc-=8;}});
+    sc=Math.max(0,Math.min(100,sc));
+    let cm=edges.length?edges.join("·")+"이(가) 오늘 기온의 경계선이에요 — 체감에 따라 조절하세요.":"모든 아이템이 오늘 기온("+c.t+"°)에 적정 범위예요.";
+    const allDenim=/데님/.test(c.slots.top.material||"")&&/데님/.test((c.slots.bottom&&c.slots.bottom.material)||"");
+    if(allDenim)cm+=" 올데님은 상·하 워싱 차이를 확실히 주세요.";
+    else{const tn=textureNote(c.slots.top,c.slots.bottom);if(tn)cm+=" "+tn;}
+    return{score:sc,comment:cm};
+  }},
+ {id:"fit",icon:"📐",name:"정도윤",role:"실루엣 디렉터",w:.2,
+  eval(c){
+    let sc=Math.max(0,Math.min(100,Math.round(c.sc.comps.sil/22*100)));
+    const fB=fitCatOf(c.slots.bottom);
+    const overTop=/오버|over|릴렉스|relax/i.test((c.slots.top.fit||"")+(c.slots.top.name||""));
+    let cm;
+    if(fB==="PREF")cm="선호하시는 레귤러·스트레이트 라인이라 실루엣 완성도가 높아요.";
+    else if(fB==="WIDE")cm=overTop?"상·하 볼륨이 동시에 커요 — 상의를 정돈된 핏으로 바꾸면 좋아요.":"와이드 하의지만 상의가 잡아줘 밸런스가 살아요.";
+    else if(fB==="SLIM")cm=overTop?"슬림 하의 + 여유 상의로 상하 대비가 좋아요.":"전체가 타이트한 편 — 상의에 여유를 주면 편안해 보여요.";
+    else cm="무난한 레귤러 실루엣이에요.";
+    if(c.slots.shoe&&/993|992|990|2002|1906/i.test(c.slots.shoe.name||""))cm+=" 볼륨 스니커즈가 하단을 안정감 있게 받쳐요.";
+    return{score:sc,comment:cm};
+  }},
+ {id:"tpo",icon:"🏛",name:"서지안",role:"TPO·격식 컨설턴트",w:.15,
+  eval(c){
+    let sc=Math.round(c.sc.comps.form/15*100);
+    const fset=[formalityOf(c.slots.top),formalityOf(c.slots.bottom)].concat(c.slots.shoe?[formalityOf(c.slots.shoe)]:[]);
+    const fdiff=Math.max(...fset)-Math.min(...fset);
+    let cm=fdiff===0?"격식 레벨이 일치해 어떤 자리든 무리가 없어요.":fdiff===1?"한 단계 차이의 시티 캐주얼 — 데일리로 이상적이에요.":"격식 편차가 커요 — 신발이나 상의 중 하나를 맞춰주세요.";
+    if(TPO.biz){
+      const dressy=c.slots.shoe&&/로퍼|구두|더비|드레스/.test(c.slots.shoe.name||"");
+      if(dressy){sc=Math.min(100,sc+5);cm+=" 비즈니스 모드에 맞는 슈즈 선택이에요.";}
+      else{sc=Math.max(0,sc-8);cm+=" 비즈니스 모드라면 로퍼·더비로 교체를 권해요.";}
+    }
+    if(TPO.move==="outdoor"&&c.slots.shoe&&/로퍼|구두|더비/.test(c.slots.shoe.name||"")){sc=Math.max(0,sc-6);cm+=" 실외 활동이 많다면 쿠셔닝 있는 신발이 낫겠어요.";}
+    sc=Math.max(0,Math.min(100,sc));
+    return{score:sc,comment:cm};
+  }},
+ {id:"data",icon:"📊",name:"김로그",role:"데이터·개인화 분석가",w:.2,
+  eval(c){
+    let boost=0;(c.codes||[]).forEach(cd=>boost+=itemBoost(cd));
+    let sc=Math.max(0,Math.min(100,Math.round(55+c.sc.pref*3+boost*5)));
+    let cm;
+    if(!PANEL_RECSTATS.n)cm="아직 기록이 없어 기본 선호 규칙으로 평가했어요. 확정과 별점이 쌓일수록 취향 분석이 정교해져요.";
+    else{
+      const liked=(c.codes||[]).filter(cd=>itemBoost(cd)>=1).map(cd=>itemLabel(cd));
+      cm="누적 기록 "+PANEL_RECSTATS.n+"건(별점 "+PANEL_RECSTATS.rated+"건) 학습"+(liked.length?" — "+liked.slice(0,2).join("·")+"은(는) 만족도가 검증된 아이템이에요.":" 결과를 반영했어요.");
+    }
+    if(c.sc.pref>=5)cm+=" 다크 인디고·스트레이트 등 개인 선호와도 잘 맞아요.";
+    if(isWornRecently(c.sig,7))cm+=" 단, 최근 7일 내 입은 조합이라 순위를 낮췄어요.";
+    return{score:sc,comment:cm};
+  }}
+];
+
+// 후보 생성: 옷장 전 조합 채점 → 상위 후보에 전문가 5인 평가 → 합의 점수 순 + 다양성 확보
+function genCandidates(items,w,limit){
+  refreshBoosts();
+  const t=w.high;
+  const wearable=items.filter(i=>useOf(i)!=="홈웨어");
+  const ok=i=>tempFit(i,t)!=="out";
+  const byBoost=(a,b)=>itemBoost(b.code)-itemBoost(a.code);
+  const pool=(cat,cap)=>{
+    const f=wearable.filter(i=>i.cat===cat&&ok(i));
+    const base=f.length?f:wearable.filter(i=>i.cat===cat);
+    return base.slice().sort(byBoost).slice(0,cap);
+  };
+  const tops=pool("TP",18),bottoms=pool("BT",14),shoes=pool("SH",22),outers=(t>=26?[]:pool("OT",8));
+  const out=[];
+  tops.forEach(tp=>bottoms.forEach(bt=>shoes.forEach(sh=>{
+    const sc=scoreCore(tp,bt,sh);
+    if(!sc||sc.invalid)return;
+    let pen=0;
+    [tp,bt,sh].forEach(it=>{if(tempFit(it,t)==="edge")pen-=3;});
+    [tp,bt].forEach(it=>{if(!seasonMatch(it,t))pen-=2;});
+    const slots={outer:null,top:tp,bottom:bt,shoe:sh};
+    out.push({slots,sig:codiSig(slots),sc,t,raw:sc.total+pen});
+  })));
+  // 원점수 상위 40개만 회의에 상정 (시그니처 중복 제거)
+  out.sort((a,b)=>b.raw-a.raw);
+  const seen=new Set(),uniq=[];
+  for(const c of out){if(seen.has(c.sig))continue;seen.add(c.sig);uniq.push(c);if(uniq.length>=40)break;}
+  // 아우터 배정(톤 정합 우선) + 코드 목록
+  uniq.forEach(c=>{
+    if(outers.length)c.slots.outer=outers.slice().sort((a,b)=>outerFit(c.slots.top,b)-outerFit(c.slots.top,a))[0]||null;
+    c.codes=["outer","top","bottom","shoe"].map(r=>c.slots[r]&&c.slots[r].code).filter(Boolean);
+  });
+  // 전문가 평가 + 가중 합의
+  uniq.forEach(c=>{
+    c.experts=EXPERT_DEFS.map(e=>{const r=e.eval(c);return{id:e.id,icon:e.icon,name:e.name,role:e.role,w:e.w,score:r.score,comment:r.comment};});
+    c.consensus=Math.round(c.experts.reduce((a,e)=>a+e.score*e.w,0))-(isWornRecently(c.sig,7)?8:0);
+    c.grade=c.consensus>=85?"A":c.consensus>=70?"B":c.consensus>=55?"C":"D";
+  });
+  uniq.sort((a,b)=>b.consensus-a.consensus);
+  // 다양성: 이미 뽑힌 후보와 2슬롯 이상 겹치면 뒤로
+  const picked=[];
+  for(const c of uniq){
+    const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
+    if(dup)continue;
+    picked.push(c);if(picked.length>=limit)break;
+  }
+  if(picked.length<limit)for(const c of uniq){if(picked.length>=limit)break;if(!picked.includes(c))picked.push(c);}
+  return picked;
+}
+
+// ===== 전문가 회의 탭 =====
+let PANEL={selSig:null,excluded:[]};
+function panelDate(){return SELECTED_DATE||new Date().toISOString().slice(0,10);}
+function gradeColor(g){return g==="A"?"#1f7a4d":g==="B"?"#8a6d1f":g==="C"?"#7a3b1f":"#5a2a2a";}
+function gradeBadge(g,score){return `<span style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:${gradeColor(g)};color:#fff">${g} ${score}점</span>`;}
+function panelRows(slots){
+  let h="";
+  [["outer",slots.outer],["top",slots.top],["bottom",slots.bottom],["shoe",slots.shoe]].forEach(([role,p])=>{
+    if(!p)return;
+    h+=`<div style="display:flex;align-items:center;gap:10px">
+      ${p.photo
+        ?`<span style="width:20px;height:20px;border-radius:6px;background:url('${p.photo}') center/cover;border:1px solid var(--line);flex:0 0 auto"></span>`
+        :`<span class="swatch" style="background:${colorToHex(p.color)}"></span>`}
+      <span style="font-size:11px;color:var(--sub);width:30px;font-weight:700;flex:0 0 auto">${ROLE_LABEL[role].slice(0,2)}</span>
+      <span style="font-size:13px;font-weight:600;flex:1;min-width:0">${esc((p.brand?p.brand+" ":"")+p.name)}${p.color?`<span style="font-size:11px;color:var(--sub);font-weight:400"> · ${esc(p.color)}</span>`:""}</span></div>`;
+  });
+  return h;
+}
+function renderPanel(){
+  let h=renderWeatherPanel();
+  const date=panelDate();
+  h+=`<div class="card" style="padding:13px 15px;margin-bottom:14px;border-left:3px solid var(--accent)">
+    <div style="font-size:13px;font-weight:800;margin-bottom:3px">🧑‍🎨 총괄 디자이너 회의</div>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.6">컬러 · 소재 · 실루엣 · TPO · 데이터 전문가 5인이 옷장 전체 조합을 검토하고, 총괄 디자이너가 의견을 종합해 <b style="color:var(--ink)">${esc(date)}</b>의 최적 코디 1벌을 제안해요. 마음에 들지 않으면 다른 후보를 고르거나 재회의를 요청하세요.${PANEL.excluded.length?` <button class="ghost" id="p-reset" style="padding:3px 10px;font-size:10.5px;color:var(--ink)">제외한 ${PANEL.excluded.length}건 복원</button>`:""}</div>
+  </div>`;
+  const cands=genCandidates(ITEMS,WEATHER,12).filter(c=>!PANEL.excluded.includes(c.sig));
+  if(!cands.length){
+    h+=`<div class="card" style="padding:22px;text-align:center;color:var(--sub);font-size:13px">조건에 맞는 후보가 없어요.<br>날씨를 조정하거나 제외 목록을 복원해 보세요.</div>`;
+    view.innerHTML=h;bindWeatherPanel();
+    const rs=document.getElementById("p-reset");if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.selSig=null;render();});
+    return;
+  }
+  const top=cands.find(c=>c.sig===PANEL.selSig)||cands[0];
+  const others=cands.filter(c=>c!==top).slice(0,4);
+  const es=top.experts.slice().sort((a,b)=>b.score-a.score);
+  const best=es[0],worst=es[es.length-1];
+  const synth=`전문가 5인 가중 합의 ${top.consensus}점(${top.grade}등급). ${best.role} ${best.name}이(가) ${best.score}점으로 가장 강하게 지지했고, ${worst.score<70?`${worst.role} 관점(${worst.score}점)의 보완 의견을 참고하세요.`:"모든 관점에서 고른 지지를 받았어요."}`;
+  const existing=recForDate(date);
+  // ===== 최종 추천 카드 =====
+  h+=`<div class="card" style="padding:16px;border-left:3px solid ${gradeColor(top.grade)};margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:11px;font-weight:800;color:var(--accent)">최종 추천</span>
+      ${gradeBadge(top.grade,top.consensus)}
+      ${isWornRecently(top.sig,7)?`<span style="font-size:10px;color:#7fb37f">✓ 최근 착용</span>`:""}
+    </div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:12px">👑 총괄: ${esc(synth)}</div>
+    <div style="display:grid;gap:7px;margin-bottom:12px">${panelRows(top.slots)}</div>`;
+  top.experts.forEach(e=>{
+    h+=`<div style="display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line)">
+      <span style="font-size:15px;flex:0 0 auto">${e.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:700">${esc(e.name)}</span>
+          <span style="font-size:10.5px;color:var(--sub)">${esc(e.role)}</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:800;color:${e.score>=85?"#7fb37f":e.score>=70?"#c9a94a":"#c87a4a"}">${e.score}점</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--sub);line-height:1.5;margin-top:2px">${esc(e.comment)}</div>
+      </div></div>`;
+  });
+  if(existing)h+=`<div style="font-size:11px;color:#c9a94a;margin-top:8px">⚠ ${esc(date)}에 이미 확정한 코디가 있어요 — 다시 확정하면 교체됩니다.</div>`;
+  h+=`<div style="display:flex;gap:8px;margin-top:12px">
+      <button class="primary" data-confirm style="flex:1">📌 ${esc(date)} 코디로 확정</button>
+      <button class="ghost" data-rethink style="padding:11px 14px">🔁 재회의</button>
+    </div></div>`;
+  // ===== 다른 후보 =====
+  if(others.length){
+    h+=`<div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">다른 후보 — 마음에 드는 조합을 선택하세요</div><div style="display:grid;gap:10px">`;
+    others.forEach((c,k)=>{
+      const bestE=c.experts.slice().sort((a,b)=>b.score-a.score)[0];
+      h+=`<div class="card" style="padding:13px 15px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:800;color:var(--sub)">후보 ${k+2}</span>
+          ${gradeBadge(c.grade,c.consensus)}
+          <button class="ghost" data-pick="${esc(c.sig)}" style="margin-left:auto;padding:4px 12px;font-size:11px;color:var(--ink)">이 후보 선택</button>
+        </div>
+        <div style="display:grid;gap:6px">${panelRows(c.slots)}</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:7px;line-height:1.5">💬 ${esc(bestE.icon+" "+bestE.name)}: ${esc(bestE.comment)}</div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  view.innerHTML=h;
+  bindWeatherPanel();
+  bindPanel(top);
+}
+function bindPanel(top){
+  view.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>{PANEL.selSig=b.dataset.pick;render();}));
+  const rt=view.querySelector("[data-rethink]");
+  if(rt)rt.addEventListener("click",()=>{PANEL.excluded.push(top.sig);if(PANEL.selSig===top.sig)PANEL.selSig=null;render();});
+  const rs=document.getElementById("p-reset");
+  if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.selSig=null;render();});
+  const cf=view.querySelector("[data-confirm]");
+  if(cf)cf.addEventListener("click",()=>{
+    const date=panelDate();
+    if(recForDate(date)&&!confirm(date+"에 이미 확정한 코디가 있어요. 새 코디로 교체할까요?"))return;
+    const rec={date,ts:Date.now(),codes:top.codes,
+      roles:{outer:top.slots.outer?top.slots.outer.code:null,top:top.slots.top.code,bottom:top.slots.bottom.code,shoe:top.slots.shoe?top.slots.shoe.code:null},
+      score:top.consensus,grade:top.grade,
+      experts:top.experts.map(e=>({icon:e.icon,name:e.name,role:e.role,score:e.score,comment:e.comment})),
+      weather:{high:WEATHER.high,low:WEATHER.low,cond:WEATHER.cond},
+      rating:null,memo:"",photo:""};
+    if(upsertRec(rec)){
+      markWorn(top.sig);
+      REC_UI.mode="day";REC_UI.month=date.slice(0,7);REC_UI.sel=date;
+      currentTab="records";setTab();render();
+    }
+  });
+}
+
+// ===== 기록 탭 (일별 캘린더 · 주별 · 월별) =====
+let REC_UI={mode:"day",month:new Date().toISOString().slice(0,7),sel:new Date().toISOString().slice(0,10)};
+function fmtD(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function addDays(ds,n){const d=new Date(ds+"T00:00:00");d.setDate(d.getDate()+n);return fmtD(d);}
+function weekStart(ds){const d=new Date(ds+"T00:00:00");d.setDate(d.getDate()-((d.getDay()+6)%7));return fmtD(d);}
+function shiftMonth(month,delta){const [y,m]=month.split("-").map(Number);const d=new Date(y,m-1+delta,1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");}
+function topCodes(g,n){const cnt={};g.forEach(r=>(r.codes||[]).forEach(cd=>cnt[cd]=(cnt[cd]||0)+1));return Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,n).map(([code,c])=>({code,n:c}));}
+
+function renderRecords(){
+  const recs=loadRecs();
+  let h=`<div style="display:flex;gap:6px;margin-bottom:14px">
+    ${[["day","일별"],["week","주별"],["month","월별"]].map(([m,l])=>`<button class="chip ${REC_UI.mode===m?"on":""}" data-rmode="${m}" style="flex:1">${l}</button>`).join("")}
+  </div>`;
+  if(!recs.length){
+    h+=`<div class="card" style="padding:26px;text-align:center">
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px">아직 확정한 코디가 없어요</div>
+      <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:14px">전문가 회의에서 코디를 확정하면 이곳에 일별·주별·월별로 쌓이고,<br>별점 평가가 다음 추천에 학습돼요.</div>
+      <button class="primary" id="rec-go-panel" style="padding:10px 18px">🧑‍🎨 전문가 회의 열기</button>
+    </div>`;
+    view.innerHTML=h;bindRecCommon();return;
+  }
+  if(REC_UI.mode==="day")h+=renderRecDay(recs);
+  else if(REC_UI.mode==="week")h+=renderRecWeek(recs);
+  else h+=renderRecMonth(recs);
+  view.innerHTML=h;
+  bindRecCommon();bindRecDetail();
+}
+
+function renderRecDay(recs){
+  const byDate={};recs.forEach(r=>byDate[r.date]=r);
+  const [y,m]=REC_UI.month.split("-").map(Number);
+  const days=new Date(y,m,0).getDate();
+  const startDow=new Date(y,m-1,1).getDay();
+  let h=`<div class="card" style="padding:14px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button class="ghost" data-mnav="-1" style="padding:5px 13px">‹</button>
+      <span style="font-size:14px;font-weight:800">${y}년 ${m}월</span>
+      <button class="ghost" data-mnav="1" style="padding:5px 13px">›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:10.5px;color:var(--sub);text-align:center;margin-bottom:5px">${["일","월","화","수","목","금","토"].map(d=>`<span>${d}</span>`).join("")}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">`;
+  for(let k=0;k<startDow;k++)h+=`<span></span>`;
+  for(let d=1;d<=days;d++){
+    const ds=REC_UI.month+"-"+String(d).padStart(2,"0");
+    const r=byDate[ds];const sel=REC_UI.sel===ds;
+    h+=`<button data-rday="${ds}" style="aspect-ratio:1;border-radius:8px;background:${sel?"var(--panel2)":"transparent"};border:1px solid ${sel?"var(--accent)":"transparent"};color:${r?"var(--ink)":"var(--sub)"};font-size:12px;font-weight:${r?"800":"500"};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+      <span>${d}</span>${r?`<span style="width:6px;height:6px;border-radius:99px;background:${gradeColor(r.grade)}"></span>`:`<span style="height:6px"></span>`}
+    </button>`;
+  }
+  h+=`</div></div>`;
+  h+=renderRecDetail(byDate[REC_UI.sel],REC_UI.sel);
+  return h;
+}
+
+function renderRecDetail(rec,date){
+  if(!date)return"";
+  if(!rec)return `<div class="card" style="padding:18px;text-align:center">
+    <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px">${esc(date)} — 기록이 없어요</div>
+    <button class="ghost" id="rec-go-panel" style="padding:8px 16px;color:var(--ink)">🧑‍🎨 전문가 회의에서 코디 만들기</button></div>`;
+  let h=`<div class="card" style="padding:16px;border-left:3px solid ${gradeColor(rec.grade)}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:15px;font-weight:800">${esc(date)}</span>
+      ${gradeBadge(rec.grade,rec.score)}
+      ${rec.edited?`<span style="font-size:10px;color:var(--sub)">수정됨</span>`:""}
+      <button class="ghost" data-recdel style="margin-left:auto;padding:4px 10px;font-size:11px;color:#c87a4a">삭제</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--sub);margin-bottom:12px">${rec.weather?esc(rec.weather.cond+" · "+rec.weather.high+"° / "+rec.weather.low+"°"):""}</div>
+    <div style="display:grid;gap:7px">`;
+  [["outer",rec.roles.outer],["top",rec.roles.top],["bottom",rec.roles.bottom],["shoe",rec.roles.shoe]].forEach(([role,code])=>{
+    if(!code)return;
+    const p=itemByCode(code);
+    h+=`<div style="display:flex;align-items:center;gap:10px">
+      ${p&&p.photo
+        ?`<span style="width:20px;height:20px;border-radius:6px;background:url('${p.photo}') center/cover;border:1px solid var(--line);flex:0 0 auto"></span>`
+        :`<span class="swatch" style="background:${colorToHex(p?p.color:"")}"></span>`}
+      <span style="font-size:11px;color:var(--sub);width:30px;font-weight:700;flex:0 0 auto">${ROLE_LABEL[role].slice(0,2)}</span>
+      <span style="font-size:13px;font-weight:600;flex:1;min-width:0">${p?esc((p.brand?p.brand+" ":"")+p.name):esc(code+" (옷장에서 삭제됨)")}</span>
+      <button class="ghost" data-recswap="${role}" style="padding:3px 9px;font-size:11px;color:var(--sub);flex:0 0 auto" title="다른 ${ROLE_LABEL[role]}(으)로 교체">↻</button></div>`;
+  });
+  h+=`</div>`;
+  h+=`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)">
+    <div style="font-size:11.5px;color:var(--sub);margin-bottom:5px;font-weight:600">이 코디 만족도 (다음 추천에 학습돼요)</div>
+    <div style="display:flex;gap:4px;align-items:center">${[1,2,3,4,5].map(n=>`<button data-rate="${n}" style="background:transparent;font-size:22px;padding:2px;line-height:1;color:${rec.rating&&n<=rec.rating?"#c9a94a":"var(--line)"}">★</button>`).join("")}
+    ${rec.rating?`<span style="font-size:11px;color:var(--sub);margin-left:6px">${rec.rating}점 · 다시 누르면 취소</span>`:""}</div></div>`;
+  if(rec.experts&&rec.experts.length){
+    h+=`<details style="margin-top:10px"><summary style="font-size:11.5px;color:var(--sub);cursor:pointer;font-weight:600">🧑‍🎨 확정 당시 전문가 의견 ${rec.experts.length}건</summary>
+      <div style="margin-top:8px;display:grid;gap:7px">`;
+    rec.experts.forEach(e=>{h+=`<div style="font-size:11.5px;line-height:1.5"><b>${esc(e.icon+" "+e.name)}</b> <span style="color:var(--sub)">(${esc(e.role)} · ${e.score}점)</span><br><span style="color:var(--sub)">${esc(e.comment)}</span></div>`;});
+    h+=`</div></details>`;
+  }
+  h+=`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)">
+    <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px;font-weight:600">착장 사진</div>
+    ${rec.photo?`<img src="${rec.photo}" style="width:100%;border-radius:10px;border:1px solid var(--line);margin-bottom:7px">`:""}
+    <div style="display:flex;gap:7px">
+      <button class="ghost" id="rec-photo-pick" style="padding:7px 13px;font-size:12px;color:var(--ink)">${rec.photo?"사진 교체":"📷 사진 추가"}</button>
+      ${rec.photo?`<button class="ghost" id="rec-photo-clear" style="padding:7px 13px;font-size:12px;color:var(--sub)">사진 삭제</button>`:""}
+    </div>
+    <input type="file" id="rec-photo-file" accept="image/*" style="display:none"></div>`;
+  h+=`<div style="margin-top:12px">
+    <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px;font-weight:600">메모</div>
+    <textarea class="inp" id="rec-memo" rows="2" placeholder="오늘 코디 소감 · 보완할 점">${esc(rec.memo||"")}</textarea>
+    <button class="ghost" id="rec-memo-save" style="margin-top:6px;padding:6px 14px;font-size:11.5px;color:var(--ink)">메모 저장</button></div>`;
+  h+=`</div>`;
+  return h;
+}
+
+function renderRecWeek(recs){
+  const groups={};
+  recs.forEach(r=>{const ws=weekStart(r.date);(groups[ws]=groups[ws]||[]).push(r);});
+  const keys=Object.keys(groups).sort().reverse().slice(0,10);
+  let h=`<div style="display:grid;gap:10px">`;
+  keys.forEach(ws=>{
+    const g=groups[ws],we=addDays(ws,6);
+    const rated=g.filter(r=>r.rating);
+    const avgR=rated.length?(rated.reduce((a,r)=>a+r.rating,0)/rated.length):null;
+    const avgS=Math.round(g.reduce((a,r)=>a+(r.score||0),0)/g.length);
+    const top=topCodes(g,1)[0];
+    h+=`<div class="card" style="padding:13px 15px">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:800">${ws.slice(5).replace("-","/")} ~ ${we.slice(5).replace("-","/")}</span>
+        <span style="font-size:11px;color:var(--sub)">${g.length}회 기록</span>
+        <span style="margin-left:auto;font-size:11.5px;color:#c9a94a;font-weight:700">${avgR?("★ "+avgR.toFixed(1)):"평가 없음"}</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.6">평균 합의 ${avgS}점${top?` · 최다 착용: ${esc(itemLabel(top.code))} (${top.n}회)`:""}</div>
+    </div>`;
+  });
+  h+=`</div>`;return h;
+}
+
+function renderRecMonth(recs){
+  refreshBoosts();
+  const rated=recs.filter(r=>r.rating);
+  const boosted=Object.entries(BOOSTS).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  let h=`<div class="card" style="padding:14px 15px;margin-bottom:12px;border-left:3px solid #b8935f">
+    <div style="font-size:12px;font-weight:800;color:#b8935f;margin-bottom:5px">📈 누적 경험치</div>
+    <div style="font-size:12.5px;line-height:1.7">확정 기록 <b>${recs.length}</b>건 · 별점 평가 <b>${rated.length}</b>건${boosted.length?`<br>검증된 아이템: ${boosted.map(([cd,v])=>esc(itemLabel(cd))+" (+"+v+")").join(", ")}`:""}</div>
+    <div style="font-size:10.5px;color:var(--sub);margin-top:5px">별점 4~5점을 받은 아이템은 전문가 회의에서 가산점을 받아요</div>
+  </div>`;
+  const groups={};recs.forEach(r=>{const mk=r.date.slice(0,7);(groups[mk]=groups[mk]||[]).push(r);});
+  Object.keys(groups).sort().reverse().forEach(mk=>{
+    const g=groups[mk],rr=g.filter(r=>r.rating);
+    const avgR=rr.length?(rr.reduce((a,r)=>a+r.rating,0)/rr.length):null;
+    const avgS=Math.round(g.reduce((a,r)=>a+(r.score||0),0)/g.length);
+    const tops=topCodes(g,3);
+    const bestDay=g.slice().sort((a,b)=>(b.rating||0)-(a.rating||0)||(b.score||0)-(a.score||0))[0];
+    h+=`<div class="card" style="padding:13px 15px;margin-bottom:10px">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+        <span style="font-size:14px;font-weight:800">${mk.replace("-","년 ")}월</span>
+        <span style="font-size:11px;color:var(--sub)">${g.length}회</span>
+        <span style="margin-left:auto;font-size:11.5px;color:#c9a94a;font-weight:700">${avgR?("★ "+avgR.toFixed(1)):"평가 없음"}</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.7">평균 합의 ${avgS}점 · 베스트: ${+bestDay.date.slice(8)}일 (${bestDay.grade} ${bestDay.score}점${bestDay.rating?` · ★${bestDay.rating}`:""})
+      ${tops.length?`<br>자주 입은 아이템: ${tops.map(t=>esc(itemLabel(t.code))+" "+t.n+"회").join(" · ")}`:""}</div>
+    </div>`;
+  });
+  return h;
+}
+
+function bindRecCommon(){
+  view.querySelectorAll("[data-rmode]").forEach(b=>b.addEventListener("click",()=>{REC_UI.mode=b.dataset.rmode;render();}));
+  const go=document.getElementById("rec-go-panel");
+  if(go)go.addEventListener("click",()=>{currentTab="panel";setTab();render();});
+  view.querySelectorAll("[data-mnav]").forEach(b=>b.addEventListener("click",()=>{REC_UI.month=shiftMonth(REC_UI.month,+b.dataset.mnav);render();}));
+  view.querySelectorAll("[data-rday]").forEach(b=>b.addEventListener("click",()=>{REC_UI.sel=b.dataset.rday;render();}));
+}
+function bindRecDetail(){
+  const date=REC_UI.sel;
+  view.querySelectorAll("[data-rate]").forEach(b=>b.addEventListener("click",()=>{
+    updateRec(date,r=>{r.rating=(r.rating===+b.dataset.rate)?null:+b.dataset.rate;});
+    render();
+  }));
+  view.querySelectorAll("[data-recswap]").forEach(b=>b.addEventListener("click",()=>{
+    const role=b.dataset.recswap;
+    const pool=altPool(role,ITEMS,WEATHER);
+    if(pool.length<2){alert("교체할 다른 "+ROLE_LABEL[role]+"이(가) 없어요");return;}
+    updateRec(date,r=>{
+      const ci=pool.findIndex(i=>i.code===r.roles[role]);
+      const next=pool[(ci+1+pool.length)%pool.length];
+      r.roles[role]=next.code;
+      r.codes=Object.values(r.roles).filter(Boolean);
+      r.edited=true;
+    });
+    render();
+  }));
+  const memo=document.getElementById("rec-memo"),msave=document.getElementById("rec-memo-save");
+  if(msave)msave.addEventListener("click",()=>{updateRec(date,r=>{r.memo=memo.value;});msave.textContent="저장됨 ✓";setTimeout(()=>{if(document.getElementById("rec-memo-save"))document.getElementById("rec-memo-save").textContent="메모 저장";},1500);});
+  const pf=document.getElementById("rec-photo-file"),pp=document.getElementById("rec-photo-pick");
+  if(pp)pp.addEventListener("click",()=>pf.click());
+  if(pf)pf.addEventListener("change",e=>{const f=e.target.files[0];if(f)resizePhoto(f,url=>{updateRec(date,r=>{r.photo=url;});render();});e.target.value="";});
+  const prm=document.getElementById("rec-photo-clear");
+  if(prm)prm.addEventListener("click",()=>{updateRec(date,r=>{r.photo="";});render();});
+  const del=view.querySelector("[data-recdel]");
+  if(del)del.addEventListener("click",()=>{if(confirm(date+" 기록을 삭제할까요?")){deleteRec(date);render();}});
 }
 
 // ====== 날씨 (Open-Meteo, 키 불필요) ======
@@ -770,7 +1343,7 @@ async function fetchWeather(){
     }));
     if(!SELECTED_DATE)SELECTED_DATE=FORECAST[0].date;
     applyWeather();
-  }catch(e){ WEATHER.loading=false; WEATHER.cond="날씨 불러오기 실패(수동 설정 가능)"; renderWeather(); if(currentTab==="today")render(); }
+  }catch(e){ WEATHER.loading=false; WEATHER.cond="날씨 불러오기 실패(수동 설정 가능)"; renderWeather(); if(currentTab==="today"||currentTab==="panel")render(); }
 }
 
 // 선택 날짜·수동 설정을 WEATHER에 반영
@@ -783,7 +1356,7 @@ function applyWeather(){
       rain:f.rainProb>=50||[51,53,55,61,63,65,80,81,82,95,96,99].includes(f.code),
       date:f.date,loading:false,manual:false};
   }
-  renderWeather(); if(currentTab==="today") render();
+  renderWeather(); if(currentTab==="today"||currentTab==="panel") render();
 }
 
 function condText(c){
@@ -814,6 +1387,8 @@ function nextCode(cat){const n=ITEMS.filter(i=>i.cat===cat).map(i=>parseInt((i.c
 
 function render(){
   if(currentTab==="today")renderToday();
+  else if(currentTab==="panel")renderPanel();
+  else if(currentTab==="records")renderRecords();
   else if(currentTab==="closet")renderCloset();
   else renderAdd();
 }
@@ -893,6 +1468,7 @@ function applyOverrides(codis){
 function renderToday(){
   let codis=buildCodis(ITEMS,WEATHER);
   codis=applyOverrides(codis);
+  if(ACCESSORY_REFRESHER)codis=ACCESSORY_REFRESHER(codis); // 수동 교체된 신발·하의에도 벨트를 다시 맞춤
   CURRENT_CODIS=codis;
   const note=WEATHER.high>=25?"덥고 습한 날씨라 통기성과 가벼운 핏 위주로 골랐어요.":WEATHER.high>=19?"활동하기 좋은 기온이라 레이어드 여지를 뒀어요.":WEATHER.high>=13?"선선하니 가벼운 아우터가 좋아요.":"쌀쌀하니 아우터를 챙기는 게 좋아요.";
   const subj=WEATHER.manual?"설정하신 날씨":(WEATHER.date.includes("오늘")||(FORECAST&&WEATHER.date===FORECAST[0].date)?"오늘 서울은":WEATHER.date+" 서울은");
@@ -965,8 +1541,12 @@ function renderToday(){
     if(c.accessories&&c.accessories.length){
       h+=`<div style="margin-top:4px;padding-top:8px;border-top:1px dashed var(--line)">`;
       c.accessories.forEach(a=>{
-        const txt=a.placeholder?`<span style="color:var(--sub)">${esc(a.placeholder)}</span>`:`<span style="font-weight:600">${esc((a.brand?a.brand+" ":"")+a.name)}</span>`;
-        h+=`<div style="display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:3px"><span style="width:14px;text-align:center;flex:0 0 auto">⌚</span><span style="width:30px;color:var(--sub);font-weight:700;flex:0 0 auto">소품</span>${txt}</div>`;
+        const at=((a.brand||"")+" "+(a.name||"")+" "+(a.note||"")).toLowerCase(),isBelt=/벨트|belt/.test(at),isWatch=/시계|watch/.test(at),isBracelet=/팔찌|bracelet|뱅글|체인/.test(at);
+        const icon=isBelt?"⌁":isWatch?"⌚":isBracelet?"◌":"·";
+        const label=isBelt?"벨트":isWatch?"시계":isBracelet?"팔찌":"소품";
+        const detail=!a.placeholder&&a.color?`<span style="font-size:11.5px;color:var(--sub);font-weight:400"> · ${esc(a.color)}</span>`:"";
+        const txt=a.placeholder?`<span style="color:var(--sub)">${esc(a.placeholder)}</span>`:`<span style="font-weight:600">${esc((a.brand?a.brand+" ":"")+a.name)}${detail}</span>`;
+        h+=`<div style="display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:3px"><span style="width:14px;text-align:center;flex:0 0 auto">${icon}</span><span style="width:30px;color:var(--sub);font-weight:700;flex:0 0 auto">${label}</span>${txt}</div>`;
       });
       h+=`</div>`;
     }
@@ -1157,6 +1737,8 @@ function colorGroup(color){
 // 용도 추론 (note·name·카테고리에서)
 function useOf(i){
   const n=(i.name||"").toLowerCase(), t=(n+(i.note||"")).toLowerCase();
+  if(i.use)return i.use;
+  if(/홈웨어|집에서만|실내복/.test(t))return"홈웨어";
   // 신발은 종류로 세분
   if(i.cat==="SH"){
     if(/fresh foam|fuelcell|노바|슈퍼블라스트|860|1080/i.test(n))return"운동";
