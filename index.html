@@ -1002,10 +1002,22 @@ function genCandidates(items,w,limit){
     const slots={outer:null,top:tp,bottom:bt,shoe:sh};
     out.push({slots,sig:codiSig(slots),sc,t,raw:sc.total+pen});
   })));
-  // 원점수 상위 40개만 회의에 상정 (시그니처 중복 제거)
+  // 원점수 상위 후보를 회의에 상정 (시그니처 중복 제거 + 상의 쿼터로 특정 상의 독점 방지)
   out.sort((a,b)=>b.raw-a.raw);
-  const seen=new Set(),uniq=[];
-  for(const c of out){if(seen.has(c.sig))continue;seen.add(c.sig);uniq.push(c);if(uniq.length>=40)break;}
+  const seen=new Set(),uniq=[],topCntU={};
+  const CAP=60,PER_TOP=6;
+  for(const c of out){
+    if(seen.has(c.sig))continue;
+    const tc=c.slots.top.code;
+    if((topCntU[tc]||0)>=PER_TOP)continue;   // 한 상의는 최대 PER_TOP 조합까지만 상정
+    seen.add(c.sig);uniq.push(c);topCntU[tc]=(topCntU[tc]||0)+1;
+    if(uniq.length>=CAP)break;
+  }
+  // 쿼터로 부족하면 나머지 상위 조합으로 채움
+  if(uniq.length<CAP)for(const c of out){
+    if(uniq.length>=CAP)break;if(seen.has(c.sig))continue;
+    seen.add(c.sig);uniq.push(c);
+  }
   // 아우터 배정(톤 정합 우선) + 코드 목록
   uniq.forEach(c=>{
     if(outers.length)c.slots.outer=outers.slice().sort((a,b)=>outerFit(c.slots.top,b)-outerFit(c.slots.top,a))[0]||null;
@@ -1018,19 +1030,32 @@ function genCandidates(items,w,limit){
     c.grade=c.consensus>=85?"A":c.consensus>=70?"B":c.consensus>=55?"C":"D";
   });
   uniq.sort((a,b)=>b.consensus-a.consensus);
-  // 다양성: 이미 뽑힌 후보와 2슬롯 이상 겹치면 뒤로
-  const picked=[];
+  // 다양성 필터: (1) 2슬롯 이상 겹치면 제외 (2) 같은 상의는 쿼터만큼만 — 특정 상의 독점 방지
+  const nTops=new Set(uniq.map(c=>c.slots.top.code)).size;
+  const maxPerTop=Math.max(2,Math.ceil(limit/Math.max(1,nTops)));
+  const picked=[],topCount={};
   for(const c of uniq){
+    const tc=c.slots.top.code;
     const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
     if(dup)continue;
-    picked.push(c);if(picked.length>=limit)break;
+    if((topCount[tc]||0)>=maxPerTop)continue;
+    picked.push(c);topCount[tc]=(topCount[tc]||0)+1;
+    if(picked.length>=limit)break;
+  }
+  // 쿼터로도 부족하면 상의 쿼터만 풀어서 채움 (그래도 2슬롯 중복은 유지)
+  if(picked.length<limit)for(const c of uniq){
+    if(picked.length>=limit)break;if(picked.includes(c))continue;
+    const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
+    if(dup)continue;
+    picked.push(c);
   }
   if(picked.length<limit)for(const c of uniq){if(picked.length>=limit)break;if(!picked.includes(c))picked.push(c);}
   return picked;
 }
 
 // ===== 전문가 회의 탭 =====
-let PANEL={selSig:null,excluded:[],addingOp:false,integrated:null};
+let PANEL={selSig:null,excluded:[],excludedTops:[],addingOp:false,integrated:null};
+let CURRENT_PANEL_POOL=[];
 function panelDate(){return SELECTED_DATE||new Date().toISOString().slice(0,10);}
 
 // ===== 외부 전문 코디네이터 의견 (날짜별 저장) =====
@@ -1102,15 +1127,22 @@ function renderPanel(){
     <div style="font-size:13px;font-weight:800;margin-bottom:3px">🧑‍🎨 총괄 디자이너 회의</div>
     <div style="font-size:11.5px;color:var(--sub);line-height:1.6"><b style="color:var(--ink)">나의 전문 코디네이터</b>(엔진 5인: 컬러·소재·실루엣·TPO·데이터)가 옷장 전체 조합을 검토해 <b style="color:var(--ink)">${esc(date)}</b>의 최적 코디를 제안해요. 여기에 <b style="color:#5aa0d8">외부 전문 코디네이터</b> 의견을 넣거나 생성한 뒤 <b style="color:var(--ink)">의견 통합</b>으로 최종안을 만들 수 있어요. 마음에 안 들면 다른 후보 선택 또는 재회의!${PANEL.excluded.length?` <button class="ghost" id="p-reset" style="padding:3px 10px;font-size:10.5px;color:var(--ink)">제외한 ${PANEL.excluded.length}건 복원</button>`:""}</div>
   </div>`;
-  const cands=genCandidates(ITEMS,WEATHER,12).filter(c=>!PANEL.excluded.includes(c.sig));
+  const pool=genCandidates(ITEMS,WEATHER,24);
+  // 재회의: 제외한 조합(sig)과 제외한 상의(excludedTops)를 회피. 모두 소진되면 자동 리셋.
+  let cands=pool.filter(c=>!PANEL.excluded.includes(c.sig)&&!PANEL.excludedTops.includes(c.slots.top.code));
+  if(!cands.length)cands=pool.filter(c=>!PANEL.excluded.includes(c.sig));
+  if(!cands.length){PANEL.excluded=[];PANEL.excludedTops=[];cands=pool;}
   if(!cands.length){
-    h+=`<div class="card" style="padding:22px;text-align:center;color:var(--sub);font-size:13px">조건에 맞는 후보가 없어요.<br>날씨를 조정하거나 제외 목록을 복원해 보세요.</div>`;
+    h+=`<div class="card" style="padding:22px;text-align:center;color:var(--sub);font-size:13px">조건에 맞는 후보가 없어요.<br>날씨를 조정해 보세요.</div>`;
     view.innerHTML=h;bindWeatherPanel();
-    const rs=document.getElementById("p-reset");if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.selSig=null;render();});
+    const rs=document.getElementById("p-reset");if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.excludedTops=[];PANEL.selSig=null;render();});
     return;
   }
-  const top=cands.find(c=>c.sig===PANEL.selSig)||cands[0];
-  const others=cands.filter(c=>c!==top).slice(0,4);
+  // 사용자가 명시 선택(selSig)한 후보는 상의 회피와 무관하게 pool 전체에서 찾는다.
+  let top=PANEL.selSig?pool.find(c=>c.sig===PANEL.selSig):null;
+  if(!top)top=cands[0];
+  const others=cands.filter(c=>c.sig!==top.sig).slice(0,4);
+  CURRENT_PANEL_POOL=pool;
   const es=top.experts.slice().sort((a,b)=>b.score-a.score);
   const best=es[0],worst=es[es.length-1];
   const synth=`전문가 5인 가중 합의 ${top.consensus}점(${top.grade}등급). ${best.role} ${best.name}이(가) ${best.score}점으로 가장 강하게 지지했고, ${worst.score<70?`${worst.role} 관점(${worst.score}점)의 보완 의견을 참고하세요.`:"모든 관점에서 고른 지지를 받았어요."}`;
@@ -1211,11 +1243,23 @@ function renderPanel(){
   bindPanel(top);
 }
 function bindPanel(top){
-  view.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>{PANEL.selSig=b.dataset.pick;PANEL.integrated=null;render();}));
+  view.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>{
+    PANEL.selSig=b.dataset.pick;
+    // 사용자가 고른 조합의 상의는 회피 목록에서 해제 (선택 존중)
+    const picked=CURRENT_PANEL_POOL.find(c=>c.sig===b.dataset.pick);
+    if(picked)PANEL.excludedTops=PANEL.excludedTops.filter(tc=>tc!==picked.slots.top.code);
+    PANEL.integrated=null;render();
+  }));
   const rt=view.querySelector("[data-rethink]");
-  if(rt)rt.addEventListener("click",()=>{PANEL.excluded.push(top.sig);if(PANEL.selSig===top.sig)PANEL.selSig=null;PANEL.integrated=null;render();});
+  if(rt)rt.addEventListener("click",()=>{
+    // 재회의: 현재 조합 + 현재 상의를 회피해 눈에 띄게 다른 코디를 유도
+    if(!PANEL.excluded.includes(top.sig))PANEL.excluded.push(top.sig);
+    if(top.slots.top&&!PANEL.excludedTops.includes(top.slots.top.code))PANEL.excludedTops.push(top.slots.top.code);
+    if(PANEL.selSig===top.sig)PANEL.selSig=null;
+    PANEL.integrated=null;render();
+  });
   const rs=document.getElementById("p-reset");
-  if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.selSig=null;render();});
+  if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.excludedTops=[];PANEL.selSig=null;render();});
   // 외부 의견: 넣기 / 생성 / 삭제 / 통합
   const oa=view.querySelector("[data-op-add]");
   if(oa)oa.addEventListener("click",()=>{PANEL.addingOp=true;render();});
