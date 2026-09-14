@@ -122,8 +122,8 @@ const SEED=[
 {code:"OT001",cat:"OT",brand:"Levi's",name:"Blue Tab™ Denim Mac Coat",size:"L",color:"인디고",material:"데님",note:"세련된 데님 맥코트"},
 {code:"OT002",cat:"OT",brand:"Levi's",name:"타입 2 데님 트러커 자켓",size:"L",color:"인디고",fit:"레귤러",material:"데님",note:"클래식 실루엣"},
 {code:"OT003",cat:"OT",brand:"Uniqlo",name:"JWA 집업 블루종",color:"아이보리",note:"부드러운 인상"},
-{code:"OT004",cat:"OT",brand:"Uniqlo",name:"해링턴 자켓",size:"L",color:"베이지",note:"출근용 근본 아우터"},
-{code:"OT005",cat:"OT",brand:"Polo Ralph Lauren",name:"베이직 윈드브레이커",fit:"레귤러",material:"폴리",note:"스포티 무드"},
+{code:"OT004",cat:"OT",brand:"Uniqlo",name:"해링턴 자켓",size:"L",color:"올리브",note:"캐주얼 해링턴 아우터"},
+{code:"OT005",cat:"OT",brand:"Polo Ralph Lauren",name:"해링턴 자켓",color:"베이지",fit:"레귤러",material:"폴리",note:"스마트 캐주얼 · 밝고 부드러운 인상"},
 {code:"TP001",cat:"TP",brand:"Polo Ralph Lauren",name:"옥스포드 셔츠",size:"M(105)",color:"화이트",pattern:"솔리드",material:"면",note:"버튼다운 근본 셔츠"},
 {code:"TP002",cat:"TP",brand:"Thomas More",name:"스트라이프 셔츠",size:"XL",color:"그레이",pattern:"스트라이프",note:"시티보이 무드"},
 {code:"TP003",cat:"TP",brand:"Uniqlo",name:"JWA 데님 셔츠",color:"블루",material:"데님",note:"워크웨어 · 셔츠 아우터"},
@@ -216,6 +216,16 @@ const REQUIRED_ITEMS=[
 ];
 function mergeRequired(items){
   const out=items.slice();let changed=false;
+  const outerCorrections={
+    OT004:{brand:"Uniqlo",name:"해링턴 자켓",color:"올리브",note:"캐주얼 해링턴 아우터"},
+    OT005:{brand:"Polo Ralph Lauren",name:"해링턴 자켓",color:"베이지",note:"스마트 캐주얼 · 밝고 부드러운 인상"}
+  };
+  Object.entries(outerCorrections).forEach(([code,fields])=>{
+    const idx=out.findIndex(item=>item.code===code);if(idx<0)return;
+    if(Object.entries(fields).some(([key,value])=>out[idx][key]!==value)){
+      out[idx]={...out[idx],...fields};changed=true;
+    }
+  });
   const oversizedIndex=out.findIndex(item=>item.code==="TP031");
   if(oversizedIndex>=0&&out[oversizedIndex].fit!=="오버사이즈"){
     const current=out[oversizedIndex];
@@ -1020,10 +1030,58 @@ function genCandidates(items,w,limit){
 }
 
 // ===== 전문가 회의 탭 =====
-let PANEL={selSig:null,excluded:[]};
+let PANEL={selSig:null,excluded:[],addingOp:false,integrated:null};
 function panelDate(){return SELECTED_DATE||new Date().toISOString().slice(0,10);}
-function gradeColor(g){return g==="A"?"#1f7a4d":g==="B"?"#8a6d1f":g==="C"?"#7a3b1f":"#5a2a2a";}
-function gradeBadge(g,score){return `<span style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:${gradeColor(g)};color:#fff">${g} ${score}점</span>`;}
+
+// ===== 외부 전문 코디네이터 의견 (날짜별 저장) =====
+const EXT_KEY="codi:extops:v1";
+function loadExtOps(date){try{const m=JSON.parse(localStorage.getItem(EXT_KEY)||"{}");return m[date]||[];}catch(e){return[];}}
+function saveExtOps(date,list){try{const m=JSON.parse(localStorage.getItem(EXT_KEY)||"{}");m[date]=list;localStorage.setItem(EXT_KEY,JSON.stringify(m));}catch(e){}}
+function hashStr(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return Math.abs(h);}
+// 의견 통합: 나의 코디네이터 5인 + 점수 있는 외부 의견을 1인 1표로 합산
+function integratedScore(top,ext){
+  const scored=(ext||[]).filter(o=>o.score!=null&&o.score!=="");
+  if(!scored.length)return top.consensus;
+  return Math.round((top.consensus*5+scored.reduce((a,o)=>a+ +o.score,0))/(5+scored.length));
+}
+function gradeOf(s){return s>=85?"A":s>=70?"B":s>=55?"C":"D";}
+// '의견 생성' — 새로운 관점의 가상 외부 코디네이터 (규칙 기반)
+const EXT_PERSONAS=[
+ {icon:"📈",name:"루카",role:"트렌드 애널리스트",
+  gen(c){const fB=fitCatOf(c.slots.bottom);
+   const shoe=c.slots.shoe?((c.slots.shoe.brand?c.slots.shoe.brand+" ":"")+c.slots.shoe.name):null;
+   let cm=fB==="WIDE"?"와이드 실루엣이 현 시즌 흐름과 맞닿아 있어요.":"시장은 와이드로 기울었지만, 체형에 맞는 라인을 지키는 쪽이 오래 가는 스타일이에요 — 이 조합이 그래요.";
+   if(shoe)cm+=" "+shoe+"은(는) 수요가 꾸준한 모델이라 룩의 무게중심을 잡아줘요.";
+   return{comment:cm,delta:fB==="WIDE"?2:0};}},
+ {icon:"⬜",name:"모리",role:"미니멀리즘 스타일리스트",
+  gen(c){const vivids=[c.slots.top,c.slots.bottom,c.slots.shoe].filter(Boolean).filter(isVivid).length;
+   const cm=vivids===0?"불필요한 포인트가 없어 좋아요. 색을 덜어낸 만큼 소재와 핏이 보입니다.":vivids===1?"포인트가 딱 하나라 시선이 정리돼요. 나머지를 뉴트럴로 받친 판단이 좋아요.":"포인트 요소가 두 개 이상이에요. 하나만 남기고 덜어내면 훨씬 정돈됩니다.";
+   return{comment:cm,delta:vivids<=1?2:-4};}},
+ {icon:"🎭",name:"하나",role:"컬러 심리 컨설턴트",
+  gen(c){const t=toneOf(c.slots.top);
+   const cm=t==="COOL"?"차분한 쿨 톤 상의는 신뢰감과 침착함을 전달해요. 미팅이나 첫 만남에 유리한 인상입니다.":t==="WARM"?"웜 톤 상의는 친근하고 편안한 인상을 줘요. 부드러운 커뮤니케이션이 필요한 날에 좋아요.":"뉴트럴 상의는 어디에도 튀지 않는 균형 잡힌 인상이에요. 상대의 성향을 모르는 자리에 안전합니다.";
+   return{comment:cm,delta:1};}},
+ {icon:"📷",name:"태오",role:"스트릿 포토그래퍼",
+  gen(c){const vT=valueOf(c.slots.top),vB=valueOf(c.slots.bottom);
+   let cm=vT!==vB?"상하 명도 대비가 있어 사진에서 실루엣이 또렷하게 살아요.":"상하 명도가 비슷해 사진에선 덩어리져 보일 수 있어요. 롤업이나 턱인으로 허리선을 만들어 주세요.";
+   if(c.slots.shoe&&valueOf(c.slots.shoe)==="LIGHT")cm+=" 밝은 신발이 프레임 하단에 시선 포인트를 만들어요.";
+   return{comment:cm,delta:vT!==vB?2:-2};}},
+ {icon:"🛍",name:"윤슬",role:"퍼스널 쇼퍼",
+  gen(c){const topName=(c.slots.top.name||"").slice(0,16);
+   return{comment:"보유 아이템끼리의 조합 활용도가 높아요. 이 조합이 잘 맞으면 "+topName+" 계열을 한 벌 더 들여도 실패가 없겠어요.",delta:0};}}
+];
+function genExternalOp(c,idx){
+  const p=EXT_PERSONAS[idx%EXT_PERSONAS.length];
+  const g=p.gen(c);
+  const jitter=hashStr(c.sig+p.name)%7-3;
+  const score=Math.max(50,Math.min(100,c.consensus+g.delta+jitter));
+  return{icon:p.icon,name:p.name,role:p.role,score,comment:g.comment,gen:true,ts:Date.now()};
+}
+function gradeColor(g){if(!g)return"#6b675c";return g==="A"?"#1f7a4d":g==="B"?"#8a6d1f":g==="C"?"#7a3b1f":"#5a2a2a";}
+function gradeBadge(g,score){
+  if(!g||score==null)return `<span style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:#4a4636;color:#e8e2d4">✍ 직접 기록</span>`;
+  return `<span style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:${gradeColor(g)};color:#fff">${g} ${score}점</span>`;
+}
 function panelRows(slots){
   let h="";
   [["outer",slots.outer],["top",slots.top],["bottom",slots.bottom],["shoe",slots.shoe]].forEach(([role,p])=>{
@@ -1042,7 +1100,7 @@ function renderPanel(){
   const date=panelDate();
   h+=`<div class="card" style="padding:13px 15px;margin-bottom:14px;border-left:3px solid var(--accent)">
     <div style="font-size:13px;font-weight:800;margin-bottom:3px">🧑‍🎨 총괄 디자이너 회의</div>
-    <div style="font-size:11.5px;color:var(--sub);line-height:1.6">컬러 · 소재 · 실루엣 · TPO · 데이터 전문가 5인이 옷장 전체 조합을 검토하고, 총괄 디자이너가 의견을 종합해 <b style="color:var(--ink)">${esc(date)}</b>의 최적 코디 1벌을 제안해요. 마음에 들지 않으면 다른 후보를 고르거나 재회의를 요청하세요.${PANEL.excluded.length?` <button class="ghost" id="p-reset" style="padding:3px 10px;font-size:10.5px;color:var(--ink)">제외한 ${PANEL.excluded.length}건 복원</button>`:""}</div>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.6"><b style="color:var(--ink)">나의 전문 코디네이터</b>(엔진 5인: 컬러·소재·실루엣·TPO·데이터)가 옷장 전체 조합을 검토해 <b style="color:var(--ink)">${esc(date)}</b>의 최적 코디를 제안해요. 여기에 <b style="color:#5aa0d8">외부 전문 코디네이터</b> 의견을 넣거나 생성한 뒤 <b style="color:var(--ink)">의견 통합</b>으로 최종안을 만들 수 있어요. 마음에 안 들면 다른 후보 선택 또는 재회의!${PANEL.excluded.length?` <button class="ghost" id="p-reset" style="padding:3px 10px;font-size:10.5px;color:var(--ink)">제외한 ${PANEL.excluded.length}건 복원</button>`:""}</div>
   </div>`;
   const cands=genCandidates(ITEMS,WEATHER,12).filter(c=>!PANEL.excluded.includes(c.sig));
   if(!cands.length){
@@ -1066,6 +1124,8 @@ function renderPanel(){
     </div>
     <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:12px">👑 총괄: ${esc(synth)}</div>
     <div style="display:grid;gap:7px;margin-bottom:12px">${panelRows(top.slots)}</div>`;
+  // ===== 나의 전문 코디네이터 (내장 엔진 5인) =====
+  h+=`<div style="font-size:11px;font-weight:800;color:var(--accent);margin-top:2px">🧑‍🎨 나의 전문 코디네이터</div>`;
   top.experts.forEach(e=>{
     h+=`<div style="display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line)">
       <span style="font-size:15px;flex:0 0 auto">${e.icon}</span>
@@ -1078,7 +1138,53 @@ function renderPanel(){
         <div style="font-size:11.5px;color:var(--sub);line-height:1.5;margin-top:2px">${esc(e.comment)}</div>
       </div></div>`;
   });
-  if(existing)h+=`<div style="font-size:11px;color:#c9a94a;margin-top:8px">⚠ ${esc(date)}에 이미 확정한 코디가 있어요 — 다시 확정하면 교체됩니다.</div>`;
+  // ===== 외부 전문 코디네이터 =====
+  const ext=loadExtOps(date);
+  h+=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:800;color:#5aa0d8">🌐 외부 전문 코디네이터</span>
+    <span style="font-size:10.5px;color:var(--sub)">${ext.length?ext.length+"명 참여":"아직 의견 없음"}</span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="ghost" data-op-add style="padding:4px 10px;font-size:11px;color:var(--ink)">✍ 의견 넣기</button>
+      <button class="ghost" data-op-gen style="padding:4px 10px;font-size:11px;color:var(--ink)">✨ 의견 생성</button>
+    </div></div>`;
+  if(!ext.length&&!PANEL.addingOp)h+=`<div style="font-size:11px;color:var(--sub);margin-top:6px;line-height:1.5">다른 스타일리스트·AI·지인의 의견을 직접 입력하거나(의견 넣기), 새로운 관점의 코디네이터 의견을 자동 생성해 보세요. 점수가 있는 의견은 '의견 통합' 시 최종 점수에 1인 1표로 반영돼요.</div>`;
+  ext.forEach((o,i)=>{
+    h+=`<div style="display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line)">
+      <span style="font-size:15px;flex:0 0 auto">${esc(o.icon||"🌐")}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:700">${esc(o.name)}</span>
+          <span style="font-size:10.5px;color:var(--sub)">${esc(o.role)}${o.gen?" · 생성됨":""}</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:800;color:${o.score==null?"var(--sub)":o.score>=85?"#7fb37f":o.score>=70?"#c9a94a":"#c87a4a"}">${o.score==null?"참고 의견":o.score+"점"}</span>
+          <button class="ghost" data-op-del="${i}" style="padding:2px 7px;font-size:12px;color:var(--sub);flex:0 0 auto">×</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--sub);line-height:1.5;margin-top:2px">${esc(o.comment)}</div>
+      </div></div>`;
+  });
+  if(PANEL.addingOp){
+    h+=`<div style="padding:12px;margin-top:10px;background:var(--panel2);border-radius:10px;border:1px solid var(--line)">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <label class="f" style="flex:1">이름<input class="inp" id="op-name" placeholder="예: 스타일리스트 J"></label>
+        <label class="f" style="flex:1">분야<input class="inp" id="op-role" placeholder="예: 패션 MD"></label>
+        <label class="f" style="width:86px;flex:0 0 auto">점수(선택)<input class="inp" id="op-score" type="number" min="0" max="100" placeholder="0~100"></label>
+      </div>
+      <label class="f">의견 *<textarea class="inp" id="op-comment" rows="2" placeholder="이 코디에 대한 의견을 적어주세요"></textarea></label>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="primary" id="op-save" style="flex:1;padding:9px">의견 추가</button>
+        <button class="ghost" id="op-cancel">취소</button>
+      </div></div>`;
+  }
+  // ===== 의견 통합 =====
+  const scoredExt=ext.filter(o=>o.score!=null&&o.score!=="");
+  const showMerged=PANEL.integrated===top.sig&&ext.length;
+  if(showMerged){
+    const ms=integratedScore(top,ext),mg=gradeOf(ms);
+    h+=`<div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:#1f2b22;border:1px solid #2e4a38">
+      <div style="font-size:11px;font-weight:800;color:#7fb37f;margin-bottom:3px">🧩 의견 통합 결과 — 최종안</div>
+      <div style="font-size:12.5px;line-height:1.6">나의 코디네이터 5인(${top.consensus}점) + 외부 ${scoredExt.length}인 합산 → <b>${ms}점 (${mg}등급)</b>${ext.length>scoredExt.length?` · 점수 없는 의견 ${ext.length-scoredExt.length}건은 참고용`:""}</div></div>`;
+  }
+  if(ext.length&&!showMerged)h+=`<button class="ghost" data-op-merge style="width:100%;margin-top:12px;padding:11px;color:var(--ink);font-weight:700;border:1px solid #2e4a38">🧩 의견 통합 — 내부 5인 + 외부 ${ext.length}인 최종안 만들기</button>`;
+  if(existing)h+=`<div style="font-size:11px;color:#c9a94a;margin-top:10px">⚠ ${esc(date)}에 이미 확정한 코디가 있어요 — 다시 확정하면 교체됩니다.</div>`;
   h+=`<div style="display:flex;gap:8px;margin-top:12px">
       <button class="primary" data-confirm style="flex:1">📌 ${esc(date)} 코디로 확정</button>
       <button class="ghost" data-rethink style="padding:11px 14px">🔁 재회의</button>
@@ -1105,31 +1211,62 @@ function renderPanel(){
   bindPanel(top);
 }
 function bindPanel(top){
-  view.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>{PANEL.selSig=b.dataset.pick;render();}));
+  view.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>{PANEL.selSig=b.dataset.pick;PANEL.integrated=null;render();}));
   const rt=view.querySelector("[data-rethink]");
-  if(rt)rt.addEventListener("click",()=>{PANEL.excluded.push(top.sig);if(PANEL.selSig===top.sig)PANEL.selSig=null;render();});
+  if(rt)rt.addEventListener("click",()=>{PANEL.excluded.push(top.sig);if(PANEL.selSig===top.sig)PANEL.selSig=null;PANEL.integrated=null;render();});
   const rs=document.getElementById("p-reset");
   if(rs)rs.addEventListener("click",()=>{PANEL.excluded=[];PANEL.selSig=null;render();});
+  // 외부 의견: 넣기 / 생성 / 삭제 / 통합
+  const oa=view.querySelector("[data-op-add]");
+  if(oa)oa.addEventListener("click",()=>{PANEL.addingOp=true;render();});
+  const og=view.querySelector("[data-op-gen]");
+  if(og)og.addEventListener("click",()=>{
+    const date=panelDate(),list=loadExtOps(date);
+    list.push(genExternalOp(top,list.length));
+    saveExtOps(date,list);PANEL.integrated=null;render();
+  });
+  view.querySelectorAll("[data-op-del]").forEach(b=>b.addEventListener("click",()=>{
+    const date=panelDate(),list=loadExtOps(date);
+    list.splice(+b.dataset.opDel,1);saveExtOps(date,list);PANEL.integrated=null;render();
+  }));
+  const oc=document.getElementById("op-cancel");
+  if(oc)oc.addEventListener("click",()=>{PANEL.addingOp=false;render();});
+  const os=document.getElementById("op-save");
+  if(os)os.addEventListener("click",()=>{
+    const comment=val("op-comment").trim();
+    if(!comment){alert("의견 내용을 입력해주세요.");return;}
+    let score=null;const sRaw=val("op-score").trim();
+    if(sRaw!==""){score=Math.round(+sRaw);if(isNaN(score)){alert("점수는 0~100 숫자로 입력해주세요.");return;}score=Math.max(0,Math.min(100,score));}
+    const date=panelDate(),list=loadExtOps(date);
+    list.push({icon:"🌐",name:val("op-name").trim()||"외부 코디네이터",role:val("op-role").trim()||"스타일 어드바이저",score,comment,ts:Date.now()});
+    saveExtOps(date,list);PANEL.addingOp=false;PANEL.integrated=null;render();
+  });
+  const om=view.querySelector("[data-op-merge]");
+  if(om)om.addEventListener("click",()=>{PANEL.integrated=top.sig;render();});
+  // 확정: 통합 점수(외부 점수 의견 포함) + 전체 의견 저장
   const cf=view.querySelector("[data-confirm]");
   if(cf)cf.addEventListener("click",()=>{
     const date=panelDate();
     if(recForDate(date)&&!confirm(date+"에 이미 확정한 코디가 있어요. 새 코디로 교체할까요?"))return;
+    const ext=loadExtOps(date);
+    const fscore=integratedScore(top,ext);
     const rec={date,ts:Date.now(),codes:top.codes,
       roles:{outer:top.slots.outer?top.slots.outer.code:null,top:top.slots.top.code,bottom:top.slots.bottom.code,shoe:top.slots.shoe?top.slots.shoe.code:null},
-      score:top.consensus,grade:top.grade,
-      experts:top.experts.map(e=>({icon:e.icon,name:e.name,role:e.role,score:e.score,comment:e.comment})),
+      score:fscore,grade:gradeOf(fscore),
+      experts:top.experts.map(e=>({icon:e.icon,name:e.name,role:e.role,score:e.score,comment:e.comment,group:"my"}))
+        .concat(ext.map(o=>({icon:o.icon||"🌐",name:o.name,role:o.role,score:o.score,comment:o.comment,group:"ext"}))),
       weather:{high:WEATHER.high,low:WEATHER.low,cond:WEATHER.cond},
       rating:null,memo:"",photo:""};
     if(upsertRec(rec)){
       markWorn(top.sig);
-      REC_UI.mode="day";REC_UI.month=date.slice(0,7);REC_UI.sel=date;
+      REC_UI.mode="day";REC_UI.month=date.slice(0,7);REC_UI.sel=date;REC_UI.composing=false;
       currentTab="records";setTab();render();
     }
   });
 }
 
 // ===== 기록 탭 (일별 캘린더 · 주별 · 월별) =====
-let REC_UI={mode:"day",month:new Date().toISOString().slice(0,7),sel:new Date().toISOString().slice(0,10)};
+let REC_UI={mode:"day",month:new Date().toISOString().slice(0,7),sel:new Date().toISOString().slice(0,10),composing:false,draft:null};
 function fmtD(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function addDays(ds,n){const d=new Date(ds+"T00:00:00");d.setDate(d.getDate()+n);return fmtD(d);}
 function weekStart(ds){const d=new Date(ds+"T00:00:00");d.setDate(d.getDate()-((d.getDay()+6)%7));return fmtD(d);}
@@ -1144,10 +1281,14 @@ function renderRecords(){
   if(!recs.length){
     h+=`<div class="card" style="padding:26px;text-align:center">
       <div style="font-size:14px;font-weight:700;margin-bottom:6px">아직 확정한 코디가 없어요</div>
-      <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:14px">전문가 회의에서 코디를 확정하면 이곳에 일별·주별·월별로 쌓이고,<br>별점 평가가 다음 추천에 학습돼요.</div>
-      <button class="primary" id="rec-go-panel" style="padding:10px 18px">🧑‍🎨 전문가 회의 열기</button>
+      <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:14px">전문가 회의에서 확정하거나, 오늘 실제로 입은 조합을 직접 기록하세요.<br>기록과 별점이 다음 추천에 학습돼요.</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="primary" id="rec-go-panel" style="padding:10px 18px">🧑‍🎨 전문가 회의 열기</button>
+        <button class="ghost" data-compose style="padding:10px 18px;color:var(--ink)">✍ 직접 기록</button>
+      </div>
     </div>`;
-    view.innerHTML=h;bindRecCommon();return;
+    if(REC_UI.composing)h+=`<div style="margin-top:14px">`+renderComposer(REC_UI.sel)+`</div>`;
+    view.innerHTML=h;bindRecCommon();bindRecDetail();return;
   }
   if(REC_UI.mode==="day")h+=renderRecDay(recs);
   else if(REC_UI.mode==="week")h+=renderRecWeek(recs);
@@ -1178,21 +1319,73 @@ function renderRecDay(recs){
     </button>`;
   }
   h+=`</div></div>`;
-  h+=renderRecDetail(byDate[REC_UI.sel],REC_UI.sel);
+  h+=REC_UI.composing?renderComposer(REC_UI.sel):renderRecDetail(byDate[REC_UI.sel],REC_UI.sel);
   return h;
+}
+
+// ===== 직접 기록: 오늘 실제 입은 조합을 슬롯별로 선택해 저장 =====
+function renderComposer(date){
+  const d=REC_UI.draft||{outer:"",top:"",bottom:"",shoe:""};
+  const opts=(cat,cur,noneLabel)=>{
+    let s=`<option value="">${noneLabel}</option>`;
+    ITEMS.filter(i=>i.cat===cat).forEach(i=>{s+=`<option value="${esc(i.code)}" ${i.code===cur?"selected":""}>${esc(i.code+" · "+(i.brand?i.brand+" ":"")+i.name+(i.color?" · "+i.color:""))}</option>`;});
+    return s;
+  };
+  return `<div class="card" style="padding:16px;border-left:3px solid #5aa0d8">
+    <div style="font-size:14px;font-weight:800;margin-bottom:4px">✍ ${esc(date)} 직접 기록</div>
+    <div style="font-size:11.5px;color:var(--sub);margin-bottom:12px">실제로 입은 조합을 선택하세요. 저장하면 '나의 전문 코디네이터' 평가도 함께 기록돼요.</div>
+    <div style="display:grid;gap:10px">
+      <label class="f">아우터<select class="inp" id="cp-outer">${opts("OT",d.outer,"없음")}</select></label>
+      <label class="f">상의 *<select class="inp" id="cp-top">${opts("TP",d.top,"선택하세요")}</select></label>
+      <label class="f">하의 *<select class="inp" id="cp-bottom">${opts("BT",d.bottom,"선택하세요")}</select></label>
+      <label class="f">신발<select class="inp" id="cp-shoe">${opts("SH",d.shoe,"없음")}</select></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="primary" id="cp-save" style="flex:1">기록 저장</button>
+      <button class="ghost" id="cp-cancel">취소</button>
+    </div></div>`;
+}
+function saveManualRecord(date){
+  const g=id=>{const el=document.getElementById(id);return el?el.value:"";};
+  const top=itemByCode(g("cp-top")),bottom=itemByCode(g("cp-bottom"));
+  if(!top||!bottom){alert("상의와 하의는 꼭 선택해주세요.");return;}
+  const outer=itemByCode(g("cp-outer")),shoe=itemByCode(g("cp-shoe"));
+  if(recForDate(date)&&!confirm(date+"에 이미 기록이 있어요. 이 조합으로 교체할까요?"))return;
+  refreshBoosts();
+  const slots={outer,top,bottom,shoe};
+  const sc=scoreCore(top,bottom,shoe);
+  let experts=[],score=null,grade=null;
+  if(sc&&!sc.invalid){
+    const cand={slots,sig:codiSig(slots),sc,t:WEATHER.high,codes:[outer,top,bottom,shoe].filter(Boolean).map(i=>i.code)};
+    experts=EXPERT_DEFS.map(e=>{const r=e.eval(cand);return{icon:e.icon,name:e.name,role:e.role,score:r.score,comment:r.comment,group:"my"};});
+    score=Math.round(EXPERT_DEFS.reduce((a,e,i)=>a+experts[i].score*e.w,0));
+    grade=gradeOf(score);
+  }
+  const rec={date,ts:Date.now(),source:"manual",
+    codes:[outer,top,bottom,shoe].filter(Boolean).map(i=>i.code),
+    roles:{outer:outer?outer.code:null,top:top.code,bottom:bottom.code,shoe:shoe?shoe.code:null},
+    score,grade,experts,
+    weather:{high:WEATHER.high,low:WEATHER.low,cond:WEATHER.cond},
+    rating:null,memo:"",photo:""};
+  if(upsertRec(rec)){markWorn(codiSig(slots));REC_UI.composing=false;REC_UI.draft=null;render();}
 }
 
 function renderRecDetail(rec,date){
   if(!date)return"";
   if(!rec)return `<div class="card" style="padding:18px;text-align:center">
     <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px">${esc(date)} — 기록이 없어요</div>
-    <button class="ghost" id="rec-go-panel" style="padding:8px 16px;color:var(--ink)">🧑‍🎨 전문가 회의에서 코디 만들기</button></div>`;
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="ghost" id="rec-go-panel" style="padding:8px 16px;color:var(--ink)">🧑‍🎨 전문가 회의</button>
+      <button class="ghost" data-compose style="padding:8px 16px;color:var(--ink)">✍ 직접 기록</button>
+    </div></div>`;
   let h=`<div class="card" style="padding:16px;border-left:3px solid ${gradeColor(rec.grade)}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span style="font-size:15px;font-weight:800">${esc(date)}</span>
       ${gradeBadge(rec.grade,rec.score)}
+      ${rec.source==="manual"&&rec.grade?`<span style="font-size:10px;color:#5aa0d8">✍ 직접</span>`:""}
       ${rec.edited?`<span style="font-size:10px;color:var(--sub)">수정됨</span>`:""}
-      <button class="ghost" data-recdel style="margin-left:auto;padding:4px 10px;font-size:11px;color:#c87a4a">삭제</button>
+      <button class="ghost" data-compose style="margin-left:auto;padding:4px 10px;font-size:11px;color:var(--sub)">✍ 다시 구성</button>
+      <button class="ghost" data-recdel style="padding:4px 10px;font-size:11px;color:#c87a4a">삭제</button>
     </div>
     <div style="font-size:11.5px;color:var(--sub);margin-bottom:12px">${rec.weather?esc(rec.weather.cond+" · "+rec.weather.high+"° / "+rec.weather.low+"°"):""}</div>
     <div style="display:grid;gap:7px">`;
@@ -1213,9 +1406,13 @@ function renderRecDetail(rec,date){
     <div style="display:flex;gap:4px;align-items:center">${[1,2,3,4,5].map(n=>`<button data-rate="${n}" style="background:transparent;font-size:22px;padding:2px;line-height:1;color:${rec.rating&&n<=rec.rating?"#c9a94a":"var(--line)"}">★</button>`).join("")}
     ${rec.rating?`<span style="font-size:11px;color:var(--sub);margin-left:6px">${rec.rating}점 · 다시 누르면 취소</span>`:""}</div></div>`;
   if(rec.experts&&rec.experts.length){
-    h+=`<details style="margin-top:10px"><summary style="font-size:11.5px;color:var(--sub);cursor:pointer;font-weight:600">🧑‍🎨 확정 당시 전문가 의견 ${rec.experts.length}건</summary>
+    const my=rec.experts.filter(e=>e.group!=="ext"),ex=rec.experts.filter(e=>e.group==="ext");
+    h+=`<details style="margin-top:10px"><summary style="font-size:11.5px;color:var(--sub);cursor:pointer;font-weight:600">🧑‍🎨 확정 당시 코디네이터 의견 ${rec.experts.length}건</summary>
       <div style="margin-top:8px;display:grid;gap:7px">`;
-    rec.experts.forEach(e=>{h+=`<div style="font-size:11.5px;line-height:1.5"><b>${esc(e.icon+" "+e.name)}</b> <span style="color:var(--sub)">(${esc(e.role)} · ${e.score}점)</span><br><span style="color:var(--sub)">${esc(e.comment)}</span></div>`;});
+    if(my.length)h+=`<div style="font-size:10.5px;font-weight:800;color:var(--accent)">나의 전문 코디네이터</div>`;
+    my.forEach(e=>{h+=`<div style="font-size:11.5px;line-height:1.5"><b>${esc(e.icon+" "+e.name)}</b> <span style="color:var(--sub)">(${esc(e.role)} · ${e.score!=null?e.score+"점":"참고"})</span><br><span style="color:var(--sub)">${esc(e.comment)}</span></div>`;});
+    if(ex.length)h+=`<div style="font-size:10.5px;font-weight:800;color:#5aa0d8;margin-top:4px">외부 전문 코디네이터</div>`;
+    ex.forEach(e=>{h+=`<div style="font-size:11.5px;line-height:1.5"><b>${esc((e.icon||"🌐")+" "+e.name)}</b> <span style="color:var(--sub)">(${esc(e.role)} · ${e.score!=null?e.score+"점":"참고"})</span><br><span style="color:var(--sub)">${esc(e.comment)}</span></div>`;});
     h+=`</div></details>`;
   }
   h+=`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)">
@@ -1243,7 +1440,8 @@ function renderRecWeek(recs){
     const g=groups[ws],we=addDays(ws,6);
     const rated=g.filter(r=>r.rating);
     const avgR=rated.length?(rated.reduce((a,r)=>a+r.rating,0)/rated.length):null;
-    const avgS=Math.round(g.reduce((a,r)=>a+(r.score||0),0)/g.length);
+    const scored=g.filter(r=>r.score!=null);
+    const avgS=scored.length?Math.round(scored.reduce((a,r)=>a+r.score,0)/scored.length):null;
     const top=topCodes(g,1)[0];
     h+=`<div class="card" style="padding:13px 15px">
       <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
@@ -1251,7 +1449,7 @@ function renderRecWeek(recs){
         <span style="font-size:11px;color:var(--sub)">${g.length}회 기록</span>
         <span style="margin-left:auto;font-size:11.5px;color:#c9a94a;font-weight:700">${avgR?("★ "+avgR.toFixed(1)):"평가 없음"}</span>
       </div>
-      <div style="font-size:11.5px;color:var(--sub);line-height:1.6">평균 합의 ${avgS}점${top?` · 최다 착용: ${esc(itemLabel(top.code))} (${top.n}회)`:""}</div>
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.6">${avgS!=null?"평균 합의 "+avgS+"점":"점수 기록 없음"}${top?` · 최다 착용: ${esc(itemLabel(top.code))} (${top.n}회)`:""}</div>
     </div>`;
   });
   h+=`</div>`;return h;
@@ -1270,7 +1468,8 @@ function renderRecMonth(recs){
   Object.keys(groups).sort().reverse().forEach(mk=>{
     const g=groups[mk],rr=g.filter(r=>r.rating);
     const avgR=rr.length?(rr.reduce((a,r)=>a+r.rating,0)/rr.length):null;
-    const avgS=Math.round(g.reduce((a,r)=>a+(r.score||0),0)/g.length);
+    const scored=g.filter(r=>r.score!=null);
+    const avgS=scored.length?Math.round(scored.reduce((a,r)=>a+r.score,0)/scored.length):null;
     const tops=topCodes(g,3);
     const bestDay=g.slice().sort((a,b)=>(b.rating||0)-(a.rating||0)||(b.score||0)-(a.score||0))[0];
     h+=`<div class="card" style="padding:13px 15px;margin-bottom:10px">
@@ -1279,7 +1478,7 @@ function renderRecMonth(recs){
         <span style="font-size:11px;color:var(--sub)">${g.length}회</span>
         <span style="margin-left:auto;font-size:11.5px;color:#c9a94a;font-weight:700">${avgR?("★ "+avgR.toFixed(1)):"평가 없음"}</span>
       </div>
-      <div style="font-size:11.5px;color:var(--sub);line-height:1.7">평균 합의 ${avgS}점 · 베스트: ${+bestDay.date.slice(8)}일 (${bestDay.grade} ${bestDay.score}점${bestDay.rating?` · ★${bestDay.rating}`:""})
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.7">${avgS!=null?"평균 합의 "+avgS+"점":"점수 기록 없음"} · 베스트: ${+bestDay.date.slice(8)}일 (${bestDay.grade?bestDay.grade+" "+bestDay.score+"점":"직접 기록"}${bestDay.rating?` · ★${bestDay.rating}`:""})
       ${tops.length?`<br>자주 입은 아이템: ${tops.map(t=>esc(itemLabel(t.code))+" "+t.n+"회").join(" · ")}`:""}</div>
     </div>`;
   });
@@ -1287,14 +1486,26 @@ function renderRecMonth(recs){
 }
 
 function bindRecCommon(){
-  view.querySelectorAll("[data-rmode]").forEach(b=>b.addEventListener("click",()=>{REC_UI.mode=b.dataset.rmode;render();}));
+  view.querySelectorAll("[data-rmode]").forEach(b=>b.addEventListener("click",()=>{REC_UI.mode=b.dataset.rmode;REC_UI.composing=false;render();}));
   const go=document.getElementById("rec-go-panel");
   if(go)go.addEventListener("click",()=>{currentTab="panel";setTab();render();});
-  view.querySelectorAll("[data-mnav]").forEach(b=>b.addEventListener("click",()=>{REC_UI.month=shiftMonth(REC_UI.month,+b.dataset.mnav);render();}));
-  view.querySelectorAll("[data-rday]").forEach(b=>b.addEventListener("click",()=>{REC_UI.sel=b.dataset.rday;render();}));
+  view.querySelectorAll("[data-mnav]").forEach(b=>b.addEventListener("click",()=>{REC_UI.month=shiftMonth(REC_UI.month,+b.dataset.mnav);REC_UI.composing=false;render();}));
+  view.querySelectorAll("[data-rday]").forEach(b=>b.addEventListener("click",()=>{REC_UI.sel=b.dataset.rday;REC_UI.composing=false;render();}));
+  // 직접 기록 시작 (기존 기록이 있으면 그 조합을 초기값으로)
+  view.querySelectorAll("[data-compose]").forEach(b=>b.addEventListener("click",()=>{
+    REC_UI.mode="day";
+    const r=recForDate(REC_UI.sel);
+    REC_UI.draft=r?{outer:r.roles.outer||"",top:r.roles.top||"",bottom:r.roles.bottom||"",shoe:r.roles.shoe||""}:null;
+    REC_UI.composing=true;render();
+  }));
 }
 function bindRecDetail(){
   const date=REC_UI.sel;
+  // 직접 기록 저장/취소
+  const cps=document.getElementById("cp-save");
+  if(cps)cps.addEventListener("click",()=>saveManualRecord(date));
+  const cpc=document.getElementById("cp-cancel");
+  if(cpc)cpc.addEventListener("click",()=>{REC_UI.composing=false;REC_UI.draft=null;render();});
   view.querySelectorAll("[data-rate]").forEach(b=>b.addEventListener("click",()=>{
     updateRec(date,r=>{r.rating=(r.rating===+b.dataset.rate)?null:+b.dataset.rate;});
     render();
