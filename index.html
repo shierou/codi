@@ -979,6 +979,8 @@ const EXPERT_DEFS=[
   }}
 ];
 
+// 하의 계열 키: 핏군 + 명도 + 데님 여부 — 501·502·LVC처럼 사실상 같은 청바지를 한 계열로 묶어 편중 방지
+function bottomFamily(bt){return fitCatOf(bt)+"|"+valueOf(bt)+"|"+(/데님|denim/i.test((bt.material||"")+(bt.name||""))?"denim":"other");}
 // 후보 1건에 전문가 5인 평가 + 가중 합의 (내부 후보·외부 의견 기반 후보 공용)
 function evalExperts(c){
   c.codes=["outer","top","bottom","shoe"].map(r=>c.slots[r]&&c.slots[r].code).filter(Boolean);
@@ -1010,15 +1012,16 @@ function genCandidates(items,w,limit){
     const slots={outer:null,top:tp,bottom:bt,shoe:sh};
     out.push({slots,sig:codiSig(slots),sc,t,raw:sc.total+pen});
   })));
-  // 원점수 상위 후보를 회의에 상정 (시그니처 중복 제거 + 상의 쿼터로 특정 상의 독점 방지)
+  // 원점수 상위 후보를 회의에 상정 (시그니처 중복 제거 + 상의·하의 쿼터로 특정 아이템 독점 방지)
   out.sort((a,b)=>b.raw-a.raw);
-  const seen=new Set(),uniq=[],topCntU={};
-  const CAP=60,PER_TOP=6;
+  const seen=new Set(),uniq=[],topCntU={},botCntU={};
+  const CAP=60,PER_TOP=6,PER_BOT=6;
   for(const c of out){
     if(seen.has(c.sig))continue;
-    const tc=c.slots.top.code;
+    const tc=c.slots.top.code,bc=c.slots.bottom.code;
     if((topCntU[tc]||0)>=PER_TOP)continue;   // 한 상의는 최대 PER_TOP 조합까지만 상정
-    seen.add(c.sig);uniq.push(c);topCntU[tc]=(topCntU[tc]||0)+1;
+    if((botCntU[bc]||0)>=PER_BOT)continue;   // 한 하의도 최대 PER_BOT 조합까지만 (501/502 편중 방지)
+    seen.add(c.sig);uniq.push(c);topCntU[tc]=(topCntU[tc]||0)+1;botCntU[bc]=(botCntU[bc]||0)+1;
     if(uniq.length>=CAP)break;
   }
   // 쿼터로 부족하면 나머지 상위 조합으로 채움
@@ -1034,19 +1037,22 @@ function genCandidates(items,w,limit){
   // 전문가 평가 + 가중 합의
   uniq.forEach(evalExperts);
   uniq.sort((a,b)=>b.consensus-a.consensus);
-  // 다양성 필터: (1) 2슬롯 이상 겹치면 제외 (2) 같은 상의는 쿼터만큼만 — 특정 상의 독점 방지
+  // 다양성 필터: (1) 2슬롯 이상 겹치면 제외 (2) 같은 상의·같은 하의는 쿼터만큼만 — 특정 아이템 독점 방지
   const nTops=new Set(uniq.map(c=>c.slots.top.code)).size;
+  const nBots=new Set(uniq.map(c=>bottomFamily(c.slots.bottom))).size;
   const maxPerTop=Math.max(2,Math.ceil(limit/Math.max(1,nTops)));
-  const picked=[],topCount={};
+  const maxPerBot=Math.max(2,Math.ceil(limit/Math.max(1,nBots)));
+  const picked=[],topCount={},botCount={};
   for(const c of uniq){
-    const tc=c.slots.top.code;
+    const tc=c.slots.top.code,bc=bottomFamily(c.slots.bottom);
     const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
     if(dup)continue;
     if((topCount[tc]||0)>=maxPerTop)continue;
-    picked.push(c);topCount[tc]=(topCount[tc]||0)+1;
+    if((botCount[bc]||0)>=maxPerBot)continue;
+    picked.push(c);topCount[tc]=(topCount[tc]||0)+1;botCount[bc]=(botCount[bc]||0)+1;
     if(picked.length>=limit)break;
   }
-  // 쿼터로도 부족하면 상의 쿼터만 풀어서 채움 (그래도 2슬롯 중복은 유지)
+  // 쿼터로도 부족하면 상의·하의 쿼터만 풀어서 채움 (그래도 2슬롯 중복은 유지)
   if(picked.length<limit)for(const c of uniq){
     if(picked.length>=limit)break;if(picked.includes(c))continue;
     const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
@@ -1300,7 +1306,10 @@ function renderPanel(){
   extCands.forEach(c=>{if(!allPool.some(p=>p.sig===c.sig))allPool.push(c);});
   let top=PANEL.selSig?allPool.find(c=>c.sig===PANEL.selSig):null;
   if(!top)top=iTop;
-  const others=cands.filter(c=>c.sig!==top.sig).slice(0,4);
+  // 다른 후보: 최종안·서로 간에 하의 계열이 다른 조합을 우선 노출 (부족하면 점수순으로 채움)
+  const rest=cands.filter(c=>c.sig!==top.sig),usedFam=new Set([bottomFamily(top.slots.bottom)]),others=[];
+  rest.forEach(c=>{const f=bottomFamily(c.slots.bottom);if(others.length<4&&!usedFam.has(f)){others.push(c);usedFam.add(f);}});
+  rest.forEach(c=>{if(others.length<4&&!others.includes(c))others.push(c);});
   CURRENT_PANEL_POOL=allPool;
   const es=top.experts.slice().sort((a,b)=>b.score-a.score);
   const best=es[0],worst=es[es.length-1];
