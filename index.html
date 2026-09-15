@@ -495,15 +495,28 @@ function scoreCore(top,bottom,shoe){
   return {invalid:false,base:Math.round(base),pref,total:Math.round(total),grade,reasons,comps:{color,sm,sil,form}};
 }
 
-// 아우터 정합 점수 (톤 일치/뉴트럴 우선) — 후보 정렬용
-function outerFit(base,outer){
-  if(!outer)return -1;
-  let s=0; const bt=toneOf(base);
+// 아우터 정합 점수 — 톤·아침저녁 기온·격식·색 겹침·비·최근 착용을 종합 (후보별 아우터 배정용)
+function outerFit(slots,outer,o){
+  if(!outer)return -99;
+  o=o||{};const top=slots.top,bottom=slots.bottom;
+  let s=0;
   const ot=toneOf(outer);
-  if(ot===bt||ot==="NEUTRAL")s+=3;
-  // 계절 충돌 제외
-  const so=seasonOf(outer);
+  if(ot===toneOf(top))s+=3;else if(ot==="NEUTRAL")s+=2;                       // 톤 정합 (뉴트럴은 무난하지만 톤 일치보다 낮게)
+  if(o.t!=null){const f=tempFit(outer,o.t);s+=f==="in"?2:f==="edge"?0:-3;}     // 아침·저녁 체감 적정
+  s+=Math.abs(formalityOf(outer)-formalityOf(top))<=1?1:-1;                    // 상의와 격식 일치
+  const dk=/네이비|인디고|navy|indigo/i;
+  if(bottom&&dk.test(outer.color||"")&&dk.test(bottom.color||""))s-=1;         // 네이비 아우터 + 인디고 하의 색 뭉침 (약한 감점)
+  if(bottom&&/데님|denim/i.test(outer.material||"")&&/데님|denim/i.test(bottom.material||""))s-=1;   // 청청
+  if(o.rain&&/발수|방수|윈드|폴리|테크니컬|리펠런트|water|repellent|nylon/i.test(_txt(outer)))s+=2;  // 비 오는 날 기능 소재
+  if(o.recent&&o.recent.has(outer.code))s-=1;                                  // 최근 7일 착용 아우터는 로테이션
   return s;
+}
+// 최근 N일 기록에서 입은 아우터 코드 집합 (로테이션용)
+function recentOuterCodes(date,days){
+  const set=new Set();const base=new Date(String(date||"").slice(0,10)+"T00:00:00");
+  if(isNaN(base))return set;
+  loadRecs().forEach(r=>{const d=new Date(r.date+"T00:00:00");const diff=(base-d)/86400000;if(diff>=0&&diff<days&&r.roles&&r.roles.outer)set.add(r.roles.outer);});
+  return set;
 }
 
 function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
@@ -745,7 +758,7 @@ function buildCodis(items,w){
     const bottom=pick(workBottoms.length?workBottoms:(chinos.length?chinos:bottoms0),s+1);
     const wShoes=cleanShoes.length?cleanShoes:(dressShoes.length?dressShoes:sneakers);
     const shoe=shoeForTPO(wShoes.length?wShoes:shoes0,s+2);
-    const wOuter=needO?((blazers[0]||smartOuter[0]||pick(wantOuter,s+3))||null):null;
+    const wOuter=needO?((blazers[0]||pick(smartOuter,s+3)||pick(wantOuter,s+3))||null):null;
     // 업무: 정장 아우터가 없을 때만 셔츠 레이어 시도 (데님 셔츠 등)
     const wLayer=(!wOuter&&t<24)?pickShirtLayer(top,s+5):null;
     R.push({title:"업무",vibe:"단정한 스마트 캐주얼 · 출근·미팅",accent:"#4a5a7a",style:"biz",
@@ -1013,7 +1026,7 @@ function genCandidates(items,w,limit){
     return base.slice().sort(byBoost).slice(0,cap);
   };
   const tO=outerTemp(w);
-  const tops=pool("TP",18),bottoms=pool("BT",14),shoes=pool("SH",22),outers=(outerRequired(w)?pool("OT",8,tO):[]);   // 가을·겨울·봄은 아우터 필수
+  const tops=pool("TP",18),bottoms=pool("BT",14),shoes=pool("SH",22),outers=(outerRequired(w)?pool("OT",999,tO):[]);   // 가을·겨울·봄은 아우터 필수 (옷장 전체 경쟁)
   const out=[];
   tops.forEach(tp=>bottoms.forEach(bt=>shoes.forEach(sh=>{
     const sc=scoreCore(tp,bt,sh);
@@ -1041,9 +1054,14 @@ function genCandidates(items,w,limit){
     if(uniq.length>=CAP)break;if(seen.has(c.sig))continue;
     seen.add(c.sig);uniq.push(c);
   }
-  // 아우터 배정(톤 정합 우선) + 코드 목록
+  // 아우터 배정: 종합 정합 점수 순, 동점은 등록 순서 대신 날짜·조합 해시로 로테이션
+  const recentO=recentOuterCodes(w.date,7),dateKey=String(w.date||"").slice(0,10);
   uniq.forEach(c=>{
-    if(outers.length)c.slots.outer=outers.slice().sort((a,b)=>outerFit(c.slots.top,b)-outerFit(c.slots.top,a))[0]||null;
+    if(outers.length){
+      c.outerRank=outers.map(o=>({o,s:outerFit(c.slots,o,{t:tO,rain:w.rain,recent:recentO})}))
+        .sort((a,b)=>b.s-a.s||hashStr(c.sig+a.o.code+dateKey)-hashStr(c.sig+b.o.code+dateKey));
+      c.slots.outer=c.outerRank[0].o;
+    }
     c.codes=["outer","top","bottom","shoe"].map(r=>c.slots[r]&&c.slots[r].code).filter(Boolean);
   });
   // 전문가 평가 + 가중 합의
@@ -1054,14 +1072,25 @@ function genCandidates(items,w,limit){
   const nBots=new Set(uniq.map(c=>bottomFamily(c.slots.bottom))).size;
   const maxPerTop=Math.max(2,Math.ceil(limit/Math.max(1,nTops)));
   const maxPerBot=Math.max(2,Math.ceil(limit/Math.max(1,nBots)));
-  const picked=[],topCount={},botCount={};
+  const maxPerOuter=Math.max(2,Math.ceil(limit/Math.max(1,outers.length)));
+  const picked=[],topCount={},botCount={},outCount={};
+  // 아우터 쿼터: 같은 아우터가 쿼터를 넘으면 정합 점수 2점 이내의 차선 아우터로 교체 (없으면 그대로)
+  const balanceOuter=c=>{
+    if(!c.outerRank)return;
+    const cur=c.slots.outer.code;
+    if((outCount[cur]||0)<maxPerOuter)return;
+    const alt=c.outerRank.find(r=>(outCount[r.o.code]||0)<maxPerOuter&&r.s>=c.outerRank[0].s-2);
+    if(alt){c.slots.outer=alt.o;evalExperts(c);}
+  };
+  const countOuter=c=>{if(c.slots.outer)outCount[c.slots.outer.code]=(outCount[c.slots.outer.code]||0)+1;};
   for(const c of uniq){
     const tc=c.slots.top.code,bc=bottomFamily(c.slots.bottom);
     const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
     if(dup)continue;
     if((topCount[tc]||0)>=maxPerTop)continue;
     if((botCount[bc]||0)>=maxPerBot)continue;
-    picked.push(c);topCount[tc]=(topCount[tc]||0)+1;botCount[bc]=(botCount[bc]||0)+1;
+    balanceOuter(c);
+    picked.push(c);topCount[tc]=(topCount[tc]||0)+1;botCount[bc]=(botCount[bc]||0)+1;countOuter(c);
     if(picked.length>=limit)break;
   }
   // 쿼터로도 부족하면 상의·하의 쿼터만 풀어서 채움 (그래도 2슬롯 중복은 유지)
@@ -1069,9 +1098,9 @@ function genCandidates(items,w,limit){
     if(picked.length>=limit)break;if(picked.includes(c))continue;
     const dup=picked.some(p=>{let o=0;["top","bottom","shoe"].forEach(r=>{if(p.slots[r]&&c.slots[r]&&p.slots[r].code===c.slots[r].code)o++;});return o>=2;});
     if(dup)continue;
-    picked.push(c);
+    balanceOuter(c);picked.push(c);countOuter(c);
   }
-  if(picked.length<limit)for(const c of uniq){if(picked.length>=limit)break;if(!picked.includes(c))picked.push(c);}
+  if(picked.length<limit)for(const c of uniq){if(picked.length>=limit)break;if(!picked.includes(c)){balanceOuter(c);picked.push(c);countOuter(c);}}
   return picked;
 }
 
