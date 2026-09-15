@@ -979,6 +979,14 @@ const EXPERT_DEFS=[
   }}
 ];
 
+// 후보 1건에 전문가 5인 평가 + 가중 합의 (내부 후보·외부 의견 기반 후보 공용)
+function evalExperts(c){
+  c.codes=["outer","top","bottom","shoe"].map(r=>c.slots[r]&&c.slots[r].code).filter(Boolean);
+  c.experts=EXPERT_DEFS.map(e=>{const r=e.eval(c);return{id:e.id,icon:e.icon,name:e.name,role:e.role,w:e.w,score:r.score,comment:r.comment};});
+  c.consensus=Math.round(c.experts.reduce((a,e)=>a+e.score*e.w,0))-(isWornRecently(c.sig,7)?8:0);
+  c.grade=gradeOf(c.consensus);
+  return c;
+}
 // 후보 생성: 옷장 전 조합 채점 → 상위 후보에 전문가 5인 평가 → 합의 점수 순 + 다양성 확보
 function genCandidates(items,w,limit){
   refreshBoosts();
@@ -1024,11 +1032,7 @@ function genCandidates(items,w,limit){
     c.codes=["outer","top","bottom","shoe"].map(r=>c.slots[r]&&c.slots[r].code).filter(Boolean);
   });
   // 전문가 평가 + 가중 합의
-  uniq.forEach(c=>{
-    c.experts=EXPERT_DEFS.map(e=>{const r=e.eval(c);return{id:e.id,icon:e.icon,name:e.name,role:e.role,w:e.w,score:r.score,comment:r.comment};});
-    c.consensus=Math.round(c.experts.reduce((a,e)=>a+e.score*e.w,0))-(isWornRecently(c.sig,7)?8:0);
-    c.grade=c.consensus>=85?"A":c.consensus>=70?"B":c.consensus>=55?"C":"D";
-  });
+  uniq.forEach(evalExperts);
   uniq.sort((a,b)=>b.consensus-a.consensus);
   // 다양성 필터: (1) 2슬롯 이상 겹치면 제외 (2) 같은 상의는 쿼터만큼만 — 특정 상의 독점 방지
   const nTops=new Set(uniq.map(c=>c.slots.top.code)).size;
@@ -1070,6 +1074,154 @@ function integratedScore(top,ext){
   return Math.round((top.consensus*5+scored.reduce((a,o)=>a+ +o.score,0))/(5+scored.length));
 }
 function gradeOf(s){return s>=85?"A":s>=70?"B":s>=55?"C":"D";}
+// ===== 외부 의견 텍스트 → 옷장 아이템 매칭 파서 =====
+// 의견 본문에서 아이템 코드(OT004 등) 또는 브랜드·품명·색상을 찾아 옷장 아이템에 매칭한다.
+const EXT_ALIASES=[
+ [/polo\s*ralph\s*lauren|폴로\s*랄프\s*로렌|랄프\s*로렌|ralph\s*lauren/,"ralphlauren"],
+ [/new\s*balance|뉴\s*발란스|뉴발(?![a-z가-힣])|(?<![a-z])nb(?![a-z])/,"newbalance"],
+ [/adidas|아디다스/,"adidas"],[/uniqlo|유니클로/,"uniqlo"],[/levi['’]?s|리바이스/,"levis"],
+ [/thomas\s*more|토마스\s*모어|토머스\s*모어/,"thomasmore"],[/giordano|지오다노/,"giordano"],
+ [/hazzys|헤지스/,"hazzys"],[/onitsuka\s*tiger|오니츠카\s*타이거|오니츠카/,"onitsuka"],
+ [/nautica|노티카/,"nautica"],[/(?<![a-z])zara(?![a-z])|자라(?![a-z가-힣])/,"zara"],[/clarks|클락스/,"clarks"],
+ [/(?<![a-z])asics|아식스/,"asics"],[/(?<![a-z])ecco(?![a-z])|에코(?![a-z가-힣])/,"ecco"],[/rockport|락포트/,"rockport"],
+ [/(?<![a-z])plac(?![a-z])|플랙/,"plac"],
+ [/stan\s*smith|스탠\s*스미스/,"스탠스미스"],[/samba|삼바/,"삼바"],[/decon|데콘|디콘/,"디콘"],
+ [/harrington|해링턴|헤링턴/,"해링턴"],[/jackets?|재킷|자켓|쟈켓/,"자켓"],[/trucker|트러커/,"트러커"],
+ [/blouson|블루종/,"블루종"],[/stripes?|스트라이프/,"스트라이프"],[/oxford|옥스포드|옥스퍼드/,"옥스포드"],
+ [/slacks|슬랙스/,"슬랙스"],[/chinos?|치노/,"치노"],[/selvedge|selvage|셀비지|셀베지/,"셀비지"],
+ [/스트레이트\s*핏|straight\s*fit/,"스트레이트 핏"],[/straight|스트레이트/,"스트레이트"],
+ [/t-?shirts?|(?<![a-z])tee(?![a-z])|티셔츠/,"티셔츠"],[/shirts?|셔츠/,"셔츠"],[/denim|데님/,"데님"],
+ [/knit|니트/,"니트"],[/loafers?|로퍼/,"로퍼"],[/derby|더비/,"더비"],[/polo|폴로/,"폴로"],[/mesh|메쉬|메시/,"메쉬"],
+ [/sneakers?|스니커즈/,"스니커즈"],[/pants|팬츠/,"팬츠"],
+ [/다크\s*인디고|딥\s*인디고|dark\s*indigo|deep\s*indigo/,"다크인디고"],[/indigo|인디고/,"인디고"],
+ [/navy|네이비/,"네이비"],[/gr[ae]y|그레이/,"그레이"],[/black|블랙/,"블랙"],[/white|화이트/,"화이트"],
+ [/beige|베이지/,"베이지"],[/ivory|아이보리/,"아이보리"],[/olive|올리브/,"올리브"],[/cream|크림/,"크림"],
+ [/(?<![a-z])blue(?![a-z])|블루/,"블루"],[/green|그린/,"그린"],[/brown|브라운/,"브라운"]
+].map(([re,to])=>[re,to,new RegExp("^(?:"+re.source+")$")]);
+const EXT_ALIAS_RE=new RegExp(EXT_ALIASES.map(a=>"(?:"+a[0].source+")").join("|"),"g");
+const EXT_STOP=new Set(["the","and","of","in","usa","외","등","시리즈","및","or","with"]);
+const EXT_PARTICLES=new Set(["은","는","이","가","을","를","과","와","로","의","도","만","에","으로","에서","이라","처럼","보다","에는","와는","과는","로는","까지","부터","이나","나","랑","이랑","이며","며","라면","이면"]);
+const EXT_GENERIC=new Set(["셔츠","팬츠","자켓","티셔츠","진","데님","슈즈","핏","코튼","면","신발","상의","하의","아우터","컬러","아이템","모델","클래식","classic","fit","코트","바지","스니커즈","오리지널"]);
+function extNormalize(s){
+  s=(s||"").toLowerCase().replace(/https?:\/\/\S+/g," ").replace(/[™®©’'`*_#]/g,"");
+  return s.replace(EXT_ALIAS_RE,m=>{for(const a of EXT_ALIASES){if(a[2].test(m))return" "+a[1]+" ";}return m;});
+}
+function extTokenize(s,isText){
+  const out=new Set();
+  (extNormalize(s).match(/[a-z0-9가-힣]+/g)||[]).forEach(t=>{
+    if(EXT_STOP.has(t))return;
+    if(t.length<2&&!/\d/.test(t))return;
+    out.add(t);
+    const m=t.match(/^(\d{3,})[a-z]/);if(m)out.add(m[1]);            // 990v4 → 990
+    const m2=t.match(/^([가-힣]{2,})\d+$/);if(m2)out.add(m2[1]);      // 타입2 → 타입
+    if(isText&&/[가-힣]$/.test(t)&&t.length>=3){                      // 조사 제거 변형 추가 (슬랙스가 → 슬랙스)
+      [1,2].forEach(n=>{const stem=t.slice(0,-n);if(stem.length>=2&&EXT_PARTICLES.has(t.slice(-n)))out.add(stem);});
+    }
+  });
+  return out;
+}
+let EXT_SPEC_CACHE={},EXT_BRAND_N={};
+function extRefreshBrands(){
+  EXT_BRAND_N={};EXT_SPEC_CACHE={};
+  ITEMS.forEach(i=>{const b=extNormalize(i.brand||"").trim();if(b)EXT_BRAND_N[b]=(EXT_BRAND_N[b]||0)+1;});
+}
+function extItemSpec(i){
+  const key=i.code+"|"+(i.brand||"")+"|"+(i.name||"")+"|"+(i.color||"");
+  if(EXT_SPEC_CACHE[key])return EXT_SPEC_CACHE[key];
+  const spec=new Map(),put=(t,w)=>{if(!spec.has(t)||spec.get(t)<w)spec.set(t,w);};
+  extTokenize(i.name||"").forEach(t=>put(t,/\d/.test(t)?(t.length>=3?3:1):EXT_GENERIC.has(t)?1:2));
+  const rare=(EXT_BRAND_N[extNormalize(i.brand||"").trim()]||0)<=2;   // 희소 브랜드는 식별력이 높음
+  extTokenize(i.brand||"").forEach(t=>put(t,rare?2:1));
+  extTokenize(i.color||"").forEach(t=>put(t,1));
+  let total=0;spec.forEach(w=>total+=w);
+  return EXT_SPEC_CACHE[key]={spec,total};
+}
+function extMatch(tokSet,spec){
+  let s=0,strong=false,digit=false;
+  spec.spec.forEach((w,t)=>{if(tokSet.has(t)){s+=w;if(w>=2)strong=true;if(w>=3)digit=true;}});
+  return{score:s,strong,digit,cov:spec.total?s/spec.total:0};
+}
+function extFindItem(tokSet,cat){
+  let best=null;
+  ITEMS.forEach(i=>{
+    if(i.cat!==cat||useOf(i)==="홈웨어")return;
+    const m=extMatch(tokSet,extItemSpec(i));
+    if(!m.strong)return;
+    if(!(m.digit||m.score>=4||(m.score>=3&&m.cov>=0.6)))return;
+    if(!best||m.score>best.m.score||(m.score===best.m.score&&m.cov>best.m.cov))best={item:i,m};
+  });
+  return best;
+}
+const EXT_ROLE_WORDS={outer:/^(아우터|겉옷|자켓|재킷|outer|jacket)$/,top:/^(상의|톱|탑|top|셔츠|니트|shirt)$/,bottom:/^(하의|바지|팬츠|bottom|pants)$/,shoe:/^(신발|슈즈|shoes?|footwear|스니커즈)$/,shell:/^(셸|셀|쉘|shell|셔츠\s*레이어|미드|mid)$/};
+const EXT_IGNORE_ROW=/^(이너|inner|벨트|belt|양말|socks?|시계|watch|향수|perfume|액세서리|가방|모자|안경|분류|구성|슬롯|항목|시간|구분|카테고리)/i;
+function extRoleOfCell(c){
+  c=c.replace(/[*_`#]/g,"").trim().toLowerCase();
+  for(const r in EXT_ROLE_WORDS)if(EXT_ROLE_WORDS[r].test(c))return r;
+  return EXT_IGNORE_ROW.test(c)?"ignore":null;
+}
+const EXT_ROLE_CAT={outer:"OT",top:"TP",bottom:"BT",shoe:"SH"};
+function extFindInSeg(seg,role){
+  const cat=EXT_ROLE_CAT[role];
+  const cm=seg.toLowerCase().match(/(?<![a-z0-9])(ot|tp|bt|sh)\d{3}(?![0-9])/g);
+  if(cm)for(const c of cm){const it=itemByCode(c.toUpperCase());if(it&&it.cat===cat&&useOf(it)!=="홈웨어")return{item:it,how:"코드"};}
+  const b=extFindItem(extTokenize(seg,true),cat);
+  return b?{item:b.item,how:"품명"}:null;
+}
+// 반환: {outer,top,bottom,shoe: item|null, how:{role:"표·코드"|"본문·품명"...}}
+function parseExtOpinion(text){
+  extRefreshBrands();
+  const res={outer:null,top:null,bottom:null,shoe:null,how:{}};
+  const raw=text||"";
+  // ① 마크다운 표 행 우선: 역할 셀(아우터/상의/하의/신발) 뒤의 셀들을 한 행으로 묶어 매칭
+  if(raw.includes("|")){
+    const rows=[];let cur=null;
+    raw.split("|").forEach(c=>{const s=c.trim();if(!s){cur=null;return;}const r=extRoleOfCell(s);if(r){cur={role:r,cells:[]};rows.push(cur);return;}if(cur)cur.cells.push(s);});
+    let shell=null;
+    rows.forEach(r=>{
+      if(r.role==="ignore"||!r.cells.length)return;
+      const seg=r.cells.join(" ");
+      if(r.role==="shell"){if(!shell)shell=extFindInSeg(seg,"top");return;}
+      if(res[r.role])return;
+      const f=extFindInSeg(seg,r.role);if(f){res[r.role]=f.item;res.how[r.role]="표·"+f.how;}
+    });
+    if(!res.top&&shell){res.top=shell.item;res.how.top="표(셸)·"+shell.how;}
+  }
+  // ② 본문 문장: 오늘 착장·제외·기록 관련 문장은 건너뛰고, '대안' 이후 문장은 후순위
+  const need=["outer","top","bottom","shoe"].filter(r=>!res[r]);
+  if(need.length){
+    let alt=false;
+    const segs=raw.split(/[\n|]+|[.!?](?=\s|$)/).map(s=>s.trim()).filter(Boolean).map(s=>{
+      if(/대안|alternative|다른 옵션|플랜\s*b/i.test(s))alt=true;
+      return{s,alt,skip:/오늘|어제|제외|입으셨|입었|착장|기록|착용/.test(s)};
+    });
+    [false,true].forEach(pass=>segs.forEach(sg=>{
+      if(sg.skip||sg.alt!==pass)return;
+      need.forEach(r=>{if(res[r])return;const f=extFindInSeg(sg.s,r);if(f){res[r]=f.item;res.how[r]="본문·"+f.how;}});
+    }));
+  }
+  return res;
+}
+// 외부 의견 → 후보 조합 생성 (빠진 슬롯은 나의 코디네이터 기준 추천으로 보완) → 내부 5인 채점
+function buildExtCandidates(ext,base,w){
+  const t=w.high,out=[];
+  (ext||[]).forEach((o,idx)=>{
+    if(o.gen||!o.comment)return;   // 자동 생성 의견은 점수 의견이라 조합 제안 없음
+    const p=parseExtOpinion(o.comment);
+    const info={idx,name:o.name,role:o.role,icon:o.icon||"🌐",score:o.score,how:p.how,filled:[],matched:{outer:p.outer,top:p.top,bottom:p.bottom,shoe:p.shoe}};
+    if(!["top","bottom","shoe"].some(r=>p[r])){out.push({info,fail:"본문에서 옷장 아이템(상의·하의·신발)을 찾지 못했어요 — 코드나 브랜드·품명을 적어주세요."});return;}
+    const slots={outer:p.outer||(base.slots.outer||null),top:p.top||base.slots.top,bottom:p.bottom||base.slots.bottom,shoe:p.shoe||base.slots.shoe};
+    ["top","bottom","shoe"].forEach(r=>{if(!p[r])info.filled.push(r);});
+    const sc=scoreCore(slots.top,slots.bottom,slots.shoe);
+    if(!sc||sc.invalid){out.push({info,slots,fail:"엔진 규칙 위반: "+((sc&&sc.reason)||"조합 불가")});return;}
+    let pen=0;
+    [slots.top,slots.bottom,slots.shoe].forEach(it=>{if(tempFit(it,t)==="edge")pen-=3;});
+    [slots.top,slots.bottom].forEach(it=>{if(!seasonMatch(it,t))pen-=2;});
+    const c={slots,sig:codiSig(slots),sc,t,raw:sc.total+pen,ext:info};
+    evalExperts(c);
+    out.push(c);
+  });
+  return out;
+}
 // '의견 생성' — 새로운 관점의 가상 외부 코디네이터 (규칙 기반)
 const EXT_PERSONAS=[
  {icon:"📈",name:"루카",role:"트렌드 애널리스트",
@@ -1139,19 +1291,28 @@ function renderPanel(){
     return;
   }
   // 사용자가 명시 선택(selSig)한 후보는 상의 회피와 무관하게 pool 전체에서 찾는다.
-  let top=PANEL.selSig?pool.find(c=>c.sig===PANEL.selSig):null;
-  if(!top)top=cands[0];
+  const iTop=(PANEL.selSig&&pool.find(c=>c.sig===PANEL.selSig))||cands[0];   // 나의 코디네이터 기준 추천
+  // 외부 의견 본문에서 아이템을 찾아 만든 후보 (빠진 슬롯은 iTop으로 보완) — 선택 가능하도록 풀에 합류
+  const ext=loadExtOps(date);
+  const extAll=buildExtCandidates(ext,iTop,WEATHER);
+  const extCands=extAll.filter(c=>!c.fail);
+  const allPool=pool.slice();
+  extCands.forEach(c=>{if(!allPool.some(p=>p.sig===c.sig))allPool.push(c);});
+  let top=PANEL.selSig?allPool.find(c=>c.sig===PANEL.selSig):null;
+  if(!top)top=iTop;
   const others=cands.filter(c=>c.sig!==top.sig).slice(0,4);
-  CURRENT_PANEL_POOL=pool;
+  CURRENT_PANEL_POOL=allPool;
   const es=top.experts.slice().sort((a,b)=>b.score-a.score);
   const best=es[0],worst=es[es.length-1];
-  const synth=`전문가 5인 가중 합의 ${top.consensus}점(${top.grade}등급). ${best.role} ${best.name}이(가) ${best.score}점으로 가장 강하게 지지했고, ${worst.score<70?`${worst.role} 관점(${worst.score}점)의 보완 의견을 참고하세요.`:"모든 관점에서 고른 지지를 받았어요."}`;
+  const topExt=top.ext?extCands.find(c=>c.sig===top.sig):null;
+  const synth=(topExt?`외부 코디네이터 ${topExt.ext.name}의 의견에서 찾은 조합을 나의 코디네이터 5인이 채점했어요. `:"")+`전문가 5인 가중 합의 ${top.consensus}점(${top.grade}등급). ${best.role} ${best.name}이(가) ${best.score}점으로 가장 강하게 지지했고, ${worst.score<70?`${worst.role} 관점(${worst.score}점)의 보완 의견을 참고하세요.`:"모든 관점에서 고른 지지를 받았어요."}`;
   const existing=recForDate(date);
   // ===== 최종 추천 카드 =====
   h+=`<div class="card" style="padding:16px;border-left:3px solid ${gradeColor(top.grade)};margin-bottom:14px">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span style="font-size:11px;font-weight:800;color:var(--accent)">최종 추천</span>
       ${gradeBadge(top.grade,top.consensus)}
+      ${topExt?`<span style="font-size:10px;font-weight:800;color:#5aa0d8">🌐 ${esc(topExt.ext.name)} 의견 기반</span>`:""}
       ${isWornRecently(top.sig,7)?`<span style="font-size:10px;color:#7fb37f">✓ 최근 착용</span>`:""}
     </div>
     <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:12px">👑 총괄: ${esc(synth)}</div>
@@ -1171,7 +1332,6 @@ function renderPanel(){
       </div></div>`;
   });
   // ===== 외부 전문 코디네이터 =====
-  const ext=loadExtOps(date);
   h+=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);flex-wrap:wrap">
     <span style="font-size:11px;font-weight:800;color:#5aa0d8">🌐 외부 전문 코디네이터</span>
     <span style="font-size:10.5px;color:var(--sub)">${ext.length?ext.length+"명 참여":"아직 의견 없음"}</span>
@@ -1179,7 +1339,7 @@ function renderPanel(){
       <button class="ghost" data-op-add style="padding:4px 10px;font-size:11px;color:var(--ink)">✍ 의견 넣기</button>
       <button class="ghost" data-op-gen style="padding:4px 10px;font-size:11px;color:var(--ink)">✨ 의견 생성</button>
     </div></div>`;
-  if(!ext.length&&!PANEL.addingOp)h+=`<div style="font-size:11px;color:var(--sub);margin-top:6px;line-height:1.5">다른 스타일리스트·AI·지인의 의견을 직접 입력하거나(의견 넣기), 새로운 관점의 코디네이터 의견을 자동 생성해 보세요. 점수가 있는 의견은 '의견 통합' 시 최종 점수에 1인 1표로 반영돼요.</div>`;
+  if(!ext.length&&!PANEL.addingOp)h+=`<div style="font-size:11px;color:var(--sub);margin-top:6px;line-height:1.5">다른 스타일리스트·AI·지인의 의견을 직접 입력하거나(의견 넣기), 새로운 관점의 코디네이터 의견을 자동 생성해 보세요. 점수가 있는 의견은 '의견 통합' 시 최종 점수에 1인 1표로 반영되고, 본문에 적힌 아이템 코드·브랜드·품명은 옷장에서 찾아 새 후보 조합으로 채점돼요.</div>`;
   ext.forEach((o,i)=>{
     h+=`<div style="display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line)">
       <span style="font-size:15px;flex:0 0 auto">${esc(o.icon||"🌐")}</span>
@@ -1213,7 +1373,48 @@ function renderPanel(){
     const ms=integratedScore(top,ext),mg=gradeOf(ms);
     h+=`<div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:#1f2b22;border:1px solid #2e4a38">
       <div style="font-size:11px;font-weight:800;color:#7fb37f;margin-bottom:3px">🧩 의견 통합 결과 — 최종안</div>
-      <div style="font-size:12.5px;line-height:1.6">나의 코디네이터 5인(${top.consensus}점) + 외부 ${scoredExt.length}인 합산 → <b>${ms}점 (${mg}등급)</b>${ext.length>scoredExt.length?` · 점수 없는 의견 ${ext.length-scoredExt.length}건은 참고용`:""}</div></div>`;
+      <div style="font-size:12.5px;line-height:1.6">나의 코디네이터 5인(${top.consensus}점) + 외부 ${scoredExt.length}인 합산 → <b>${ms}점 (${mg}등급)</b>${ext.length>scoredExt.length?` · 점수 없는 의견 ${ext.length-scoredExt.length}건은 참고용`:""}</div>`;
+    // ----- 외부 의견 기반 후보 -----
+    if(extAll.length){
+      h+=`<div style="font-size:11px;font-weight:800;color:#5aa0d8;margin-top:10px;padding-top:9px;border-top:1px dashed #2e4a38">🌐 외부 의견 기반 후보 ${extCands.length}건 — 의견 본문에서 옷장 아이템을 찾아 나의 코디네이터 5인이 채점했어요</div>`;
+      extAll.forEach(ec=>{
+        const src=ec.info||ec.ext;
+        const who=`${esc(src.icon)} <b>${esc(src.name)}</b> <span style="color:var(--sub);font-weight:400">${esc(src.role)}</span>`;
+        if(ec.fail){
+          h+=`<div style="margin-top:8px;padding:9px 11px;border-radius:9px;background:var(--panel2);border:1px solid var(--line)">
+            <div style="font-size:12px">${who}</div>
+            <div style="font-size:11px;color:#c87a4a;margin-top:3px;line-height:1.5">⚠ ${esc(ec.fail)}</div>
+            ${ec.slots?`<div style="display:grid;gap:5px;margin-top:6px;opacity:.7">${panelRows(ec.slots)}</div>`:""}</div>`;
+          return;
+        }
+        const isCur=ec.sig===top.sig,sameAsMine=ec.sig===iTop.sig,inPool=pool.some(p=>p.sig===ec.sig);
+        const how=["outer","top","bottom","shoe"].filter(r=>src.matched[r]).map(r=>ROLE_LABEL[r]+"("+src.how[r]+")").join(" · ");
+        const filled=src.filled.map(r=>ROLE_LABEL[r]).join("·");
+        const w=ec.experts.slice().sort((a,b)=>a.score-b.score)[0];
+        h+=`<div style="margin-top:8px;padding:10px 11px;border-radius:9px;background:var(--panel2);border:1px solid ${isCur?"#5aa0d8":"var(--line)"}">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:12px">${who}</span>
+            ${gradeBadge(ec.grade,ec.consensus)}
+            ${isCur?`<span style="font-size:10.5px;font-weight:800;color:#5aa0d8;margin-left:auto">✓ 현재 최종안${sameAsMine?" · 나의 추천과 동일":""}</span>`
+              :sameAsMine?`<span style="font-size:10.5px;color:var(--sub);margin-left:auto">나의 추천과 동일 조합</span>`
+              :`<button class="ghost" data-pick="${esc(ec.sig)}" data-pick-ext="1" style="margin-left:auto;padding:4px 12px;font-size:11px;color:var(--ink)">이 후보 선택</button>`}
+          </div>
+          <div style="display:grid;gap:5px;margin-top:8px">${panelRows(ec.slots)}</div>
+          <div style="font-size:10.5px;color:var(--sub);margin-top:6px;line-height:1.5">인식: ${esc(how)}${filled?` · <span style="color:#c9a94a">${esc(filled)}은(는) 옷장에서 못 찾아 나의 추천으로 보완</span>`:""}${!sameAsMine&&inPool?" · 나의 코디네이터 후보에도 있던 조합":""}</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:5px;line-height:1.5">💬 ${esc(w.icon+" "+w.name+" "+w.score+"점")}: ${esc(w.comment)}</div>
+        </div>`;
+      });
+      // 결론
+      const bestExt=extCands.filter(c=>c.sig!==iTop.sig).sort((a,b)=>b.consensus-a.consensus)[0];
+      let concl;
+      if(top.ext)concl=`현재 최종안은 <b>${esc(top.ext.name)}</b> 의견 기반 후보(${top.consensus}점)예요. 나의 추천은 ${iTop.consensus}점이었어요.`;
+      else if(!bestExt)concl=extCands.length?`외부 의견의 조합이 모두 나의 추천과 같아요 — 최종안 유지.`:`옷장 아이템이 인식된 외부 의견이 없어 나의 코디네이터 추천을 최종안으로 유지해요.`;
+      else if(bestExt.consensus>iTop.consensus)concl=`<b>${esc(bestExt.ext.name)}</b> 의견 기반 후보(${bestExt.consensus}점)가 나의 추천(${iTop.consensus}점)보다 높아요 — '이 후보 선택'으로 최종안을 바꿀 수 있어요.`;
+      else if(bestExt.consensus===iTop.consensus)concl=`<b>${esc(bestExt.ext.name)}</b> 의견 기반 후보와 나의 추천이 ${iTop.consensus}점 동점이에요 — 취향에 따라 선택하세요.`;
+      else concl=`나의 추천(${iTop.consensus}점)이 외부 기반 최고 후보 <b>${esc(bestExt.ext.name)}</b>안(${bestExt.consensus}점)보다 높아 최종안을 유지해요. 원하면 선택해 바꿀 수 있어요.`;
+      h+=`<div style="font-size:12px;line-height:1.6;margin-top:10px;padding-top:8px;border-top:1px dashed #2e4a38">🔎 통합 결론: ${concl}</div>`;
+    }
+    h+=`</div>`;
   }
   if(ext.length&&!showMerged)h+=`<button class="ghost" data-op-merge style="width:100%;margin-top:12px;padding:11px;color:var(--ink);font-weight:700;border:1px solid #2e4a38">🧩 의견 통합 — 내부 5인 + 외부 ${ext.length}인 최종안 만들기</button>`;
   if(existing)h+=`<div style="font-size:11px;color:#c9a94a;margin-top:10px">⚠ ${esc(date)}에 이미 확정한 코디가 있어요 — 다시 확정하면 교체됩니다.</div>`;
@@ -1248,7 +1449,7 @@ function bindPanel(top){
     // 사용자가 고른 조합의 상의는 회피 목록에서 해제 (선택 존중)
     const picked=CURRENT_PANEL_POOL.find(c=>c.sig===b.dataset.pick);
     if(picked)PANEL.excludedTops=PANEL.excludedTops.filter(tc=>tc!==picked.slots.top.code);
-    PANEL.integrated=null;render();
+    PANEL.integrated=b.hasAttribute("data-pick-ext")?b.dataset.pick:null;render();
   }));
   const rt=view.querySelector("[data-rethink]");
   if(rt)rt.addEventListener("click",()=>{
@@ -1296,7 +1497,7 @@ function bindPanel(top){
     const fscore=integratedScore(top,ext);
     const rec={date,ts:Date.now(),codes:top.codes,
       roles:{outer:top.slots.outer?top.slots.outer.code:null,top:top.slots.top.code,bottom:top.slots.bottom.code,shoe:top.slots.shoe?top.slots.shoe.code:null},
-      score:fscore,grade:gradeOf(fscore),
+      score:fscore,grade:gradeOf(fscore),origin:top.ext?("외부 의견 · "+top.ext.name):"패널",
       experts:top.experts.map(e=>({icon:e.icon,name:e.name,role:e.role,score:e.score,comment:e.comment,group:"my"}))
         .concat(ext.map(o=>({icon:o.icon||"🌐",name:o.name,role:o.role,score:o.score,comment:o.comment,group:"ext"}))),
       weather:{high:WEATHER.high,low:WEATHER.low,cond:WEATHER.cond},
