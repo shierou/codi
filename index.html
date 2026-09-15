@@ -507,6 +507,14 @@ function outerFit(base,outer){
 }
 
 function pick(a,s){return a.length?a[((s%a.length)+a.length)%a.length]:null;}
+// 아우터 필수 여부: 한여름(6~8월)이 아니면 계절상 필수, 한여름이라도 최저 18° 이하면 필수
+function outerRequired(w){
+  const m=+String((w&&w.date)||new Date().toISOString().slice(0,10)).slice(5,7);
+  const low=(w&&w.low!=null)?w.low:w.high;
+  return !(m>=6&&m<=8)||low<=18;
+}
+// 아우터 적정 판단 기온: 출퇴근 아침·저녁 체감 = (최고+최저)/2 (낮 최고기온으로 판단하면 가을 아우터가 전부 탈락)
+function outerTemp(w){return (w&&w.low!=null)?Math.round((w.high+w.low)/2):w.high;}
 // TPO 상태 (전역) — 사용자가 오늘 코디 탭에서 토글
 let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
 let REROLL=[0,0,0]; // 코디별 새로고침 시드 (전체 새로 버튼)
@@ -584,9 +592,11 @@ function buildCodis(items,w){
   // 온도 컷: 기온 범위를 '크게' 벗어난(out) 아이템 제외. 단 후보가 비면 폴백.
   const okTemp=i=>tempFit(i,t)!=="out";
   const cut=(arr)=>{const f=arr.filter(okTemp);return f.length?f:arr;};
-  const tops0=cut(tops), bottoms0=cut(bottoms), outers0=cut(outers), shoes0=cut(shoes);
+  const tO=outerTemp(w),needO=outerRequired(w);
+  const cutOuter=(arr)=>{const f=arr.filter(i=>tempFit(i,tO)!=="out");return f.length?f:arr;};
+  const tops0=cut(tops), bottoms0=cut(bottoms), outers0=cutOuter(outers), shoes0=cut(shoes);
   const wantTops=tops0;                     // 온도 컷이 계절 판정을 대체
-  const wantOuter=(t>=26)?[]:outers0;       // 26도↑면 아우터 없음
+  const wantOuter=needO?outers0:[];         // 가을·겨울·봄은 아우터 필수 (아침·저녁 체감 기준)
   const casualTops=wantTops.filter(i=>/그래픽|데님|오버|시티|캐주얼|반팔|tee/i.test((i.name||"")+(i.note||"")));
   const sneakers=shoes0.filter(i=>!/로퍼|구두|더비|부츠|드레스/.test((i.name||"")+(i.note||"")));
   const dressShoes=shoes0.filter(i=>/로퍼|구두|더비|드레스/.test((i.name||"")+(i.note||"")));
@@ -735,11 +745,11 @@ function buildCodis(items,w){
     const bottom=pick(workBottoms.length?workBottoms:(chinos.length?chinos:bottoms0),s+1);
     const wShoes=cleanShoes.length?cleanShoes:(dressShoes.length?dressShoes:sneakers);
     const shoe=shoeForTPO(wShoes.length?wShoes:shoes0,s+2);
-    const wOuter=(blazers[0]||smartOuter[0]||(t<26?pick(wantOuter,s+3):null))||null;
+    const wOuter=needO?((blazers[0]||smartOuter[0]||pick(wantOuter,s+3))||null):null;
     // 업무: 정장 아우터가 없을 때만 셔츠 레이어 시도 (데님 셔츠 등)
     const wLayer=(!wOuter&&t<24)?pickShirtLayer(top,s+5):null;
     R.push({title:"업무",vibe:"단정한 스마트 캐주얼 · 출근·미팅",accent:"#4a5a7a",style:"biz",
-      slots:{outer:t>=26?null:wOuter,shirtLayer:wLayer,top,bottom,shoe},
+      slots:{outer:wOuter,shirtLayer:wLayer,top,bottom,shoe},
       perfume:pick(perfumes.filter(p=>/우드|세이지|페어|wood|sage/i.test((p.name||"")+(p.brand||""))).length?perfumes.filter(p=>/우드|세이지|페어|wood|sage/i.test((p.name||"")+(p.brand||""))):perfumes,s),
       accessories:accessoryLayer("biz",{outer:wOuter,shirtLayer:wLayer,top,bottom,shoe}),
       bag:bagSuggest(),
@@ -765,9 +775,9 @@ function buildCodis(items,w){
     // 데이트 향수: 우디·플로럴 계열 우선
     const dPerf=perfumes.filter(p=>/우드|플라워|피오니|가이악|레이지|wood|flower|peony/i.test((p.name||"")+(p.brand||"")));
     R.push({title:"데이트",vibe:"단정하면서 멋낸 스마트 캐주얼",accent:"#7a4a6b",style:"minimal",
-      slots:{outer:t<26?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe},
+      slots:{outer:needO?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe},
       perfume:pick(dPerf.length?dPerf:perfumes,s+1),
-      accessories:accessoryLayer("minimal",{outer:t<26?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe}),
+      accessories:accessoryLayer("minimal",{outer:needO?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe}),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
       fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
@@ -786,7 +796,7 @@ function buildCodis(items,w){
       const top=pick(freeTops.length?freeTops:wantTops,s+8);
       const bottom=pick(denim.length?denim:bottoms0,s+9);
       vibe="편하고 가벼운 데일리 캐주얼";accent="#c97b4a";
-      slots={outer:t<26?pick(wantOuter,s+12):null,top,bottom,shoe:shoeForTPO(sneakers.length?sneakers:shoes0,s+11)};
+      slots={outer:needO?pick(wantOuter,s+12):null,top,bottom,shoe:shoeForTPO(sneakers.length?sneakers:shoes0,s+11)};
     }
     // 자유: 셔츠 레이어 적극 시도 (그래픽티 위에 데님/체크 셔츠)
     slots.shirtLayer=pickShirtLayer(slots.top,s+13);
@@ -927,9 +937,10 @@ const EXPERT_DEFS=[
  {id:"season",icon:"🧵",name:"한결",role:"소재·계절 전문가",w:.2,
   eval(c){
     let sc=Math.round(c.sc.comps.sm/28*100);const edges=[];
-    ["top","bottom","shoe","outer"].forEach(r=>{const it=c.slots[r];if(it&&tempFit(it,c.t)==="edge"){edges.push(ROLE_LABEL[r]);sc-=8;}});
+    ["top","bottom","shoe","outer"].forEach(r=>{const it=c.slots[r];const tt=(r==="outer"&&c.tOuter!=null)?c.tOuter:c.t;if(it&&tempFit(it,tt)==="edge"){edges.push(ROLE_LABEL[r]);sc-=8;}});
     sc=Math.max(0,Math.min(100,sc));
     let cm=edges.length?edges.join("·")+"이(가) 오늘 기온의 경계선이에요 — 체감에 따라 조절하세요.":"모든 아이템이 오늘 기온("+c.t+"°)에 적정 범위예요.";
+    if(c.slots.outer)cm+=" 아우터는 아침·저녁 체감("+(c.tOuter!=null?c.tOuter:c.t)+"°) 기준으로 골랐고, 낮에는 벗어도 완성돼요.";
     const allDenim=/데님/.test(c.slots.top.material||"")&&/데님/.test((c.slots.bottom&&c.slots.bottom.material)||"");
     if(allDenim)cm+=" 올데님은 상·하 워싱 차이를 확실히 주세요.";
     else{const tn=textureNote(c.slots.top,c.slots.bottom);if(tn)cm+=" "+tn;}
@@ -996,12 +1007,13 @@ function genCandidates(items,w,limit){
   const wearable=items.filter(i=>useOf(i)!=="홈웨어");
   const ok=i=>tempFit(i,t)!=="out";
   const byBoost=(a,b)=>itemBoost(b.code)-itemBoost(a.code);
-  const pool=(cat,cap)=>{
-    const f=wearable.filter(i=>i.cat===cat&&ok(i));
+  const pool=(cat,cap,tt)=>{
+    const f=wearable.filter(i=>i.cat===cat&&tempFit(i,tt==null?t:tt)!=="out");
     const base=f.length?f:wearable.filter(i=>i.cat===cat);
     return base.slice().sort(byBoost).slice(0,cap);
   };
-  const tops=pool("TP",18),bottoms=pool("BT",14),shoes=pool("SH",22),outers=(t>=26?[]:pool("OT",8));
+  const tO=outerTemp(w);
+  const tops=pool("TP",18),bottoms=pool("BT",14),shoes=pool("SH",22),outers=(outerRequired(w)?pool("OT",8,tO):[]);   // 가을·겨울·봄은 아우터 필수
   const out=[];
   tops.forEach(tp=>bottoms.forEach(bt=>shoes.forEach(sh=>{
     const sc=scoreCore(tp,bt,sh);
@@ -1010,7 +1022,7 @@ function genCandidates(items,w,limit){
     [tp,bt,sh].forEach(it=>{if(tempFit(it,t)==="edge")pen-=3;});
     [tp,bt].forEach(it=>{if(!seasonMatch(it,t))pen-=2;});
     const slots={outer:null,top:tp,bottom:bt,shoe:sh};
-    out.push({slots,sig:codiSig(slots),sc,t,raw:sc.total+pen});
+    out.push({slots,sig:codiSig(slots),sc,t,tOuter:tO,raw:sc.total+pen});
   })));
   // 원점수 상위 후보를 회의에 상정 (시그니처 중복 제거 + 상의·하의 쿼터로 특정 아이템 독점 방지)
   out.sort((a,b)=>b.raw-a.raw);
@@ -1222,7 +1234,7 @@ function buildExtCandidates(ext,base,w){
     let pen=0;
     [slots.top,slots.bottom,slots.shoe].forEach(it=>{if(tempFit(it,t)==="edge")pen-=3;});
     [slots.top,slots.bottom].forEach(it=>{if(!seasonMatch(it,t))pen-=2;});
-    const c={slots,sig:codiSig(slots),sc,t,raw:sc.total+pen,ext:info};
+    const c={slots,sig:codiSig(slots),sc,t,tOuter:outerTemp(w),raw:sc.total+pen,ext:info};
     evalExperts(c);
     out.push(c);
   });
@@ -1975,7 +1987,7 @@ function renderToday(){
         // 셔츠 레이어는 선택적 슬롯 — 없으면 행 자체를 생략
         if(role==="shirtLayer")return;
         // 6슬롯 항상 표기: 후보 없으면 추천 대상 없음 (단 hot 날씨 아우터는 '오늘은 불필요')
-        const msg=(role==="outer"&&WEATHER.high>=25)?"오늘 기온엔 불필요":"추천 대상 없음";
+        const msg=(role==="outer"&&!outerRequired(WEATHER))?"한여름엔 불필요":"추천 대상 없음";
         h+=`<div style="display:flex;align-items:center;gap:10px;opacity:.5">
           <span class="swatch" style="width:14px;height:14px;background:var(--line)"></span>
           <span style="font-size:11px;color:var(--sub);width:30px;font-weight:700;flex:0 0 auto">${ROLE_LABEL[role].slice(0,2)}</span>
