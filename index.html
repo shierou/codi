@@ -160,7 +160,7 @@ const SEED=[
 {code:"SH005",cat:"SH",brand:"New Balance",name:"991v2 포지드 아이언",size:"290mm",color:"그레이",note:"사이즈 업"},
 {code:"SH006",cat:"SH",brand:"New Balance",name:"ML2002RC / 2002R",size:"285mm",color:"그레이",note:"빈티지 팩"},
 {code:"SH007",cat:"SH",brand:"New Balance",name:"1080v6 / 740sg / 530sg",color:"그레이",note:"보유 중"},
-{code:"SH008",cat:"SH",brand:"Adidas",name:"핸드볼 스페지알",size:"280~285",color:"크림",material:"가죽",note:"아카이브"},
+{code:"SH008",cat:"SH",brand:"Adidas",name:"핸드볼 스페지알 스웨이드",size:"280~285",color:"크림",material:"스웨이드",note:"크림 스웨이드 갑피 · 네이비 삼선 · 검 밑창 · 부드러운 질감"},
 {code:"SH009",cat:"SH",brand:"Adidas",name:"삼바 디콘",color:"화이트",fit:"슬림",material:"가죽",note:"슬림 실루엣"},
 {code:"SH010",cat:"SH",brand:"Adidas",name:"스탠 스미스",color:"화이트",material:"가죽",note:"미니멀"},
 {code:"SH011",cat:"SH",brand:"",name:"페니 로퍼",color:"블랙",material:"가죽",note:"기본 로퍼"},
@@ -188,6 +188,7 @@ const SEED=[
 {code:"SH033",cat:"SH",brand:"Asics",name:"슈퍼블라스트 2",size:"280~285",note:"퍼포먼스 러닝"},
 {code:"SH034",cat:"SH",brand:"아디다스",name:"삼바 데콘 IF0641",size:"270",color:"블랙",price:"77,730",date:"2026-05-25"},
 {code:"SH035",cat:"SH",brand:"Ecco",name:"하이브리드 컴포트화",size:"270~275",material:"가죽",note:"GTX 방수"},
+{code:"SH036",cat:"SH",brand:"Adidas",name:"핸드볼 스페지알 레더",size:"280~285",color:"크림",material:"가죽",note:"크림 가죽 갑피 · 네이비 삼선 · 금박 레터링 · 블랙 인솔 · 스웨이드보다 단정"},
 {code:"AC001",cat:"AC",brand:"Levi's",name:"Leather Braid Belt",color:"다크 브라운",material:"위빙 가죽",note:"캐주얼 · 데님 · 턱인 코디"},
 {code:"PF001",cat:"PF",brand:"Nonfiction",name:"가이악 플라워",note:"우디+꽃향 · 마무리 필수"},
 {code:"PF002",cat:"PF",brand:"Jo Malone",name:"우드 세이지 앤 씨 솔트 외",note:"보유 중"},
@@ -212,13 +213,21 @@ const REQUIRED_ITEMS=[
   {
     code:"AC003",cat:"AC",sub:"벨트",brand:"Giordano",name:"Bridle Leather Belt",
     color:"레드 브라운",material:"브라이들 가죽",note:"셔츠 · 슬랙스 · 스마트 캐주얼"
+  },
+  {
+    code:"SH036",cat:"SH",sub:"스니커즈",brand:"Adidas",name:"핸드볼 스페지알 레더",
+    size:"280~285",color:"크림",material:"가죽",
+    note:"크림 가죽 갑피 · 네이비 삼선 · 금박 레터링 · 블랙 인솔 · 스웨이드보다 단정",
+    date:"2026-09-19"
   }
 ];
 function mergeRequired(items){
   const out=items.slice();let changed=false;
   const outerCorrections={
     OT004:{brand:"Uniqlo",name:"해링턴 자켓",color:"올리브",note:"캐주얼 해링턴 아우터"},
-    OT005:{brand:"Polo Ralph Lauren",name:"해링턴 자켓",color:"베이지",note:"스마트 캐주얼 · 밝고 부드러운 인상"}
+    OT005:{brand:"Polo Ralph Lauren",name:"해링턴 자켓",color:"베이지",note:"스마트 캐주얼 · 밝고 부드러운 인상"},
+    // 핸드볼 스페지알 2족을 스웨이드/가죽으로 분리 — SH008은 스웨이드로 확정
+    SH008:{brand:"Adidas",name:"핸드볼 스페지알 스웨이드",color:"크림",material:"스웨이드",note:"크림 스웨이드 갑피 · 네이비 삼선 · 검 밑창 · 부드러운 질감"}
   };
   Object.entries(outerCorrections).forEach(([code,fields])=>{
     const idx=out.findIndex(item=>item.code===code);if(idx<0)return;
@@ -246,6 +255,7 @@ function mergeRequired(items){
       if(required.code==="BT033")return /straight selvedge b32 raw|스트레이트 셀비지 b32/.test(text);
       if(required.code==="AC002")return /natural grain|내추럴 그레인/.test(text);
       if(required.code==="AC003")return /bridle|브라이들/.test(text);
+      if(required.code==="SH036")return /스페지알 레더|스페지알 가죽|spezial leather/.test(text);
       return false;
     });
     if(exists)continue;
