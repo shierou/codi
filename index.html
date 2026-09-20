@@ -79,7 +79,7 @@ const CATEGORIES={OT:"아우터",TP:"상의",BT:"하의",SH:"신발",AC:"액세�
 const SUBCATS={
   TP:["티셔츠","카라티","셔츠","맨투맨","니트"],
   BT:["청바지","면바지","슬랙스"],
-  OT:["코트","자켓","셔츠자켓","블레이저","트러커","바람막이"],
+  OT:["코트","자켓","셔츠자켓","블레이저","트러커","바람막이","가디건"],
   SH:["스니커즈","로퍼·구두","러닝화","부츠"],
   AC:["액세서리"], PF:["향수"], UN:["기타"]
 };
@@ -105,6 +105,7 @@ function subOf(i){
       if(/트러커|트럭커|trucker/.test(t))return"트러커";
       if(/셔츠 자켓|셔켓|셔츠자켓|오버셔츠/.test(t))return"셔츠자켓";
       if(/윈드|바람막이|블루종|폴리|집업/.test(t))return"바람막이";
+      if(/가디건|cardigan/.test(t))return"가디건";
       return"자켓";
     case"SH":
       if(/부츠|boot/.test(t))return"부츠";
@@ -124,6 +125,7 @@ const SEED=[
 {code:"OT003",cat:"OT",brand:"Uniqlo",name:"JWA 집업 블루종",color:"아이보리",note:"부드러운 인상"},
 {code:"OT004",cat:"OT",brand:"Uniqlo",name:"해링턴 자켓",size:"L",color:"올리브",note:"캐주얼 해링턴 아우터"},
 {code:"OT005",cat:"OT",brand:"Polo Ralph Lauren",name:"해링턴 자켓",color:"베이지",fit:"레귤러",material:"폴리",note:"스마트 캐주얼 · 밝고 부드러운 인상"},
+{code:"OT006",cat:"OT",sub:"가디건",brand:"수아레",name:"파인 메리노 울 100 라운드 가디건",size:"L",color:"브라운",material:"메리노 울 100%",note:"라운드넥 가디건 · 셔츠·티 위 겉레이어 · 62,910원",date:"2026-09-19",tmin:10,tmax:21},
 {code:"TP001",cat:"TP",brand:"Polo Ralph Lauren",name:"옥스포드 셔츠",size:"M(105)",color:"화이트",pattern:"솔리드",material:"면",note:"버튼다운 근본 셔츠"},
 {code:"TP002",cat:"TP",brand:"Thomas More",name:"스트라이프 셔츠",size:"XL",color:"그레이",pattern:"스트라이프",note:"시티보이 무드"},
 {code:"TP003",cat:"TP",brand:"Uniqlo",name:"JWA 데님 셔츠",color:"블루",material:"데님",note:"워크웨어 · 셔츠 아우터"},
@@ -145,7 +147,6 @@ const SEED=[
 {code:"TP020",cat:"TP",sub:"카라티",brand:"Lacoste",name:"Men's Classic Fit L.12.12 Heathered Polo",size:"L",color:"Grey",material:"Cotton",note:"Official",season:"여름,봄"},
 {code:"TP021",cat:"TP",sub:"티셔츠",brand:"브론슨",name:"NON STOCK 300g 헤비웨이트 빈티지 티",size:"XL",color:"인디고 블루",material:"코튼 100% · 300g 헤비웨이트",note:"아메리칸 빈티지 · 두꺼운 원단 · 형태 유지력 좋음",date:"2026-09-20",tmin:13,tmax:28},
 {code:"TP022",cat:"TP",sub:"티셔츠",brand:"브론슨",name:"NON STOCK 300g 헤비웨이트 빈티지 티",size:"XL",color:"블랙",material:"코튼 100% · 300g 헤비웨이트",note:"아메리칸 빈티지 · 두꺼운 원단 · 형태 유지력 좋음",date:"2026-09-20",tmin:13,tmax:28},
-{code:"TP023",cat:"TP",sub:"니트",brand:"수아레",name:"파인 메리노 울 100 라운드 가디건",size:"L",color:"브라운",material:"메리노 울 100%",note:"라운드넥 가디건 · 셔츠·티 위 레이어드 · 62,910원",date:"2026-09-19",tmin:10,tmax:21},
 {code:"BT001",cat:"BT",brand:"Levi's",name:"550™",size:"32x30",color:"인디고",fit:"릴렉스",material:"데님",note:"여유로운 와이드 스트레이트"},
 {code:"BT002",cat:"BT",brand:"Levi's",name:"555™",size:"32x30",fit:"와이드",material:"데님",note:"밑단 넓음"},
 {code:"BT003",cat:"BT",brand:"Levi's",name:"501® 오리지널 RIGID",size:"35x32",color:"인디고",fit:"스트레이트",material:"데님",note:"근본 스트레이트"},
@@ -238,9 +239,9 @@ const REQUIRED_ITEMS=[
     note:"아메리칸 빈티지 · 두꺼운 원단 · 형태 유지력 좋음",tmin:13,tmax:28,date:"2026-09-20"
   },
   {
-    code:"TP023",cat:"TP",sub:"니트",brand:"수아레",name:"파인 메리노 울 100 라운드 가디건",
+    code:"OT006",cat:"OT",sub:"가디건",brand:"수아레",name:"파인 메리노 울 100 라운드 가디건",
     size:"L",color:"브라운",material:"메리노 울 100%",
-    note:"라운드넥 가디건 · 셔츠·티 위 레이어드 · 62,910원",tmin:10,tmax:21,date:"2026-09-19"
+    note:"라운드넥 가디건 · 셔츠·티 위 겉레이어 · 62,910원",tmin:10,tmax:21,date:"2026-09-19"
   },
   {
     code:"BT034",cat:"BT",sub:"청바지",brand:"ATONG 阿瞳牛社",name:"15.5oz 아메리칸 워시 셀비지 진",
@@ -252,6 +253,22 @@ const REQUIRED_ITEMS=[
     size:"280~285",color:"크림",material:"가죽",
     note:"크림 가죽 갑피 · 네이비 삼선 · 금박 레터링 · 블랙 인솔 · 스웨이드보다 단정",
     date:"2026-09-19"
+  },
+  // 브론슨 Tompkins Loopwheeled Tubular Tee — 4색 구매(1487679)를 색상별로 분리. TP012가 그레이(MELANGE)
+  {
+    code:"TP024",cat:"TP",sub:"티셔츠",brand:"브론슨",name:"Tompkins Loopwheeled Tee",
+    size:"XXL",color:"화이트",material:"코튼 100% · 루프휠 튜블러",
+    note:"루프휠 튜블러 · 4색 구매분 분리 등록",date:"2026-04-30"
+  },
+  {
+    code:"TP025",cat:"TP",sub:"티셔츠",brand:"브론슨",name:"Tompkins Loopwheeled Tee",
+    size:"XXL",color:"블랙",material:"코튼 100% · 루프휠 튜블러",
+    note:"루프휠 튜블러 · 4색 구매분 분리 등록",date:"2026-04-30"
+  },
+  {
+    code:"TP026",cat:"TP",sub:"티셔츠",brand:"브론슨",name:"Tompkins Loopwheeled Tee",
+    size:"XXL",color:"오트밀",material:"코튼 100% · 루프휠 튜블러",
+    note:"루프휠 튜블러 · 4색 구매분 분리 등록",date:"2026-04-30"
   }
 ];
 function mergeRequired(items){
@@ -274,6 +291,13 @@ function mergeRequired(items){
     out[oversizedIndex]={...current,fit:"오버사이즈",note:[current.note,"풀아웃 또는 셔츠 아우터 연출 권장"].filter(Boolean).join(" · ")};
     changed=true;
   }
+  // 가디건은 겉옷으로 입으므로 아우터(OT)로 이동 — 이전 버전에서 TP023으로 저장된 옷장도 옮긴다
+  const cardiIdx=out.findIndex(i=>i.code==="TP023");
+  if(cardiIdx>=0&&!out.some(i=>i.code==="OT006")){
+    out[cardiIdx]={...out[cardiIdx],code:"OT006",cat:"OT",sub:"가디건"};changed=true;
+  }else if(cardiIdx>=0){
+    out.splice(cardiIdx,1);changed=true;   // OT006이 이미 있으면 옛 항목은 중복이라 제거
+  }
   const homewearIndex=out.findIndex(i=>i.code==="TP013");
   if(homewearIndex>=0&&out[homewearIndex].use!=="홈웨어"){
     const current=out[homewearIndex];
@@ -290,9 +314,10 @@ function mergeRequired(items){
       if(required.code==="AC003")return /bridle|브라이들/.test(text);
       if(required.code==="TP021")return /non ?stock/.test(text)&&/인디고|靛蓝|indigo|블루/.test((i.color||"")+text);
       if(required.code==="TP022")return /non ?stock/.test(text)&&/블랙|black|黑/.test((i.color||"")+text);
-      if(required.code==="TP023")return /메리노|merino/.test(text)&&/가디건|cardigan/.test(text);
+      if(required.code==="OT006")return /메리노|merino/.test(text)&&/가디건|cardigan/.test(text);
       if(required.code==="BT034")return /atong|阿瞳/.test(text);
       if(required.code==="SH036")return /스페지알 레더|스페지알 가죽|spezial leather/.test(text);
+      if(/^TP02[456]$/.test(required.code))return /tompkins/.test(text)&&(i.color||"")===required.color;
       return false;
     });
     if(exists)continue;
