@@ -347,11 +347,14 @@ function colorToHex(c){c=(c||"").toLowerCase();
   if(/네이비|navy/.test(c))return"#1f2a44";
   if(/블루|blue/.test(c))return"#3b6ea5";
   if(/화이트|white|아이보리/.test(c))return"#f4f1ea";
-  if(/그레이|grey|gray|melange|오트밀/.test(c))return"#9a9a93";
+  // 오트밀은 웜 계열 밝은 색이다. 그레이로 묶으면 toneOf(WARM)·valueOf(LIGHT) 판정과 스와치가 어긋난다.
+  if(/오트밀|oatmeal|오트/.test(c))return"#ddd2b8";
+  if(/그레이|grey|gray|melange|멜란지|헤더|heather/.test(c))return"#9a9a93";
+  if(/헤비 ?메탈|heavy ?metal|차콜|charcoal/.test(c))return"#4a4a4a";
   if(/블랙|black|caviar/.test(c))return"#1a1a1a";
   if(/베이지|크림|누드/.test(c))return"#d8c9a8";
   if(/브라운|brown/.test(c))return"#5a3d28";
-  if(/올리브|그린|green|세이지/.test(c))return"#6b7152";
+  if(/올리브|그린|green|세이지|포레스트|forest/.test(c))return"#6b7152";
   if(/purple|퍼플/.test(c))return"#7a5a8a";
   return"#b8b2a3";}
 
