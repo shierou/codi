@@ -653,10 +653,11 @@ function unmarkWorn(sig){saveWorn(loadWorn().filter(w=>w.sig!==sig));}
 function tuckGuide(slots,belts){
   const top=slots&&slots.top, bottom=slots&&slots.bottom, shoe=slots&&slots.shoe;
   if(!top||!bottom)return null;
-  const tTxt=((top.name||"")+" "+(top.fit||"")+" "+(top.material||"")+" "+(top.note||"")).toLowerCase();
-  const bTxt=((bottom.name||"")+" "+(bottom.fit||"")+" "+(bottom.material||"")).toLowerCase();
+  // 소분류(subOf)도 함께 본다 — "헤비웨이트 빈티지 티"처럼 품명만으로는 티셔츠인지 알기 어려운 경우가 있다
+  const tTxt=((top.name||"")+" "+subOf(top)+" "+(top.fit||"")+" "+(top.material||"")+" "+(top.note||"")).toLowerCase();
+  const bTxt=((bottom.name||"")+" "+subOf(bottom)+" "+(bottom.fit||"")+" "+(bottom.material||"")).toLowerCase();
   const isOver=/오버|오버핏|오버사이즈|릴렉스|루즈|loose|박시/.test(tTxt);
-  const isTee=/티셔츠|반팔|tee|크루넥|그래픽|에어리즘|심리스/.test(tTxt);
+  const isTee=/티셔츠|반팔|tee\b|크루넥|그래픽|에어리즘|심리스/.test(tTxt);
   const isShirt=/셔츠|옥스포드|스트라이프|플란넬|체크|shirt/.test(tTxt)&&!/티셔츠/.test(tTxt);
   const isPolo=/폴로|카라|피케|polo/.test(tTxt);
   const isKnit=/니트|가디건|스웨터|맨투맨|후드|캐시미어/.test(tTxt);
