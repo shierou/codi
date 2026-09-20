@@ -17,6 +17,5 @@ Thumbs.db
 node_modules/
 index.html_bak
 
-# 자격증명·업로드 아카이브
-auth.txt
+# 업로드 아카이브
 frontend.zip
