@@ -622,6 +622,71 @@ function markWorn(sig){
 }
 function unmarkWorn(sig){saveWorn(loadWorn().filter(w=>w.sig!==sig));}
 
+
+// ===== 상의 밑단 처리(턱인/턱아웃/프렌치턱) + 벨트 안내 =====
+// 사용자 지침: 상의는 항상 셋 중 하나를 명시하고, 턱인·프렌치턱이면 벨트 여부도 함께 알린다.
+function tuckGuide(slots,belts){
+  const top=slots&&slots.top, bottom=slots&&slots.bottom, shoe=slots&&slots.shoe;
+  if(!top||!bottom)return null;
+  const tTxt=((top.name||"")+" "+(top.fit||"")+" "+(top.material||"")+" "+(top.note||"")).toLowerCase();
+  const bTxt=((bottom.name||"")+" "+(bottom.fit||"")+" "+(bottom.material||"")).toLowerCase();
+  const isOver=/오버|오버핏|오버사이즈|릴렉스|루즈|loose|박시/.test(tTxt);
+  const isTee=/티셔츠|반팔|tee|크루넥|그래픽|에어리즘|심리스/.test(tTxt);
+  const isShirt=/셔츠|옥스포드|스트라이프|플란넬|체크|shirt/.test(tTxt)&&!/티셔츠/.test(tTxt);
+  const isPolo=/폴로|카라|피케|polo/.test(tTxt);
+  const isKnit=/니트|가디건|스웨터|맨투맨|후드|캐시미어/.test(tTxt);
+  const isDenimBottom=/데님|denim|501|502|505|511|541|550|555|565|568|셀비지/.test(bTxt);
+  const isDressBottom=/슬랙스|정장|드레스/.test(bTxt);
+  const isWideBottom=/와이드|릴렉스|loose|wide|550|555|568/.test(bTxt);
+
+  let mode,why;
+  if(isOver){mode="턱아웃";why="오버·릴렉스 핏이라 넣으면 허리에 부피가 몰려요. 그대로 빼서 입는 게 자연스러워요.";}
+  else if(isKnit){mode="턱아웃";why="니트·스웻 계열은 밑단이 두꺼워 넣으면 뭉쳐요. 빼서 입고 아래로 흐르게 두세요.";}
+  else if(isShirt&&isDressBottom){mode="턱인";why="셔츠 + 슬랙스는 완전히 넣어야 격식이 맞아요. 허리선이 드러나 비율도 올라가요.";}
+  else if(isShirt&&isWideBottom){mode="턱인";why="와이드·릴렉스 하의엔 상의를 넣어 허리선을 잡아야 아래 볼륨이 의도한 실루엣으로 읽혀요.";}
+  else if(isShirt&&isDenimBottom){mode="프렌치턱";why="셔츠 + 데님은 앞만 살짝 넣는 프렌치턱이 가장 좋아요. 캐주얼함을 유지하면서 허리선이 생겨 다리가 길어 보여요.";}
+  else if(isShirt){mode="프렌치턱";why="앞만 살짝 넣으면 단정함과 편안함의 중간을 잡을 수 있어요.";}
+  else if(isPolo&&isDressBottom){mode="턱인";why="폴로 + 슬랙스는 넣어야 깔끔해요.";}
+  else if(isPolo){mode="턱아웃";why="폴로는 기장이 짧게 떨어져서 빼서 입어도 허리선이 정리돼요.";}
+  else if(isTee&&isWideBottom){mode="프렌치턱";why="와이드 하의엔 티셔츠도 앞만 살짝 넣어 허리선을 만들어 주는 게 좋아요.";}
+  else if(isTee){mode="턱아웃";why="티셔츠는 빼서 입는 게 기본이에요.";}
+  else {mode="프렌치턱";why="앞만 살짝 넣어 허리선을 만들면 비율이 좋아져요.";}
+
+  const out={mode,why,belt:null,beltWhy:""};
+  if(mode==="턱아웃"){out.beltWhy="턱아웃이라 벨트가 보이지 않아요 — 생략해도 됩니다.";return out;}
+
+  // 턱인·프렌치턱이면 벨트를 고른다. 옷장 벨트의 용도 메모를 기준으로.
+  const pool=(belts||[]).filter(b=>b.cat==="AC"&&/벨트|belt/i.test((b.name||"")+(b.sub||"")));
+  if(!pool.length){out.beltWhy="허리선이 드러나니 벨트를 하는 게 좋은데, 옷장에 등록된 벨트가 없어요.";return out;}
+  const txt=b=>((b.brand||"")+" "+(b.name||"")+" "+(b.material||"")+" "+(b.note||"")).toLowerCase();
+  const find=re=>pool.find(b=>re.test(txt(b)));
+  // 벨트-신발 가죽 톤 맞추기는 구두·로퍼·부츠 같은 드레스 슈즈 이야기다.
+  // 가죽 스니커즈(핸드볼 스페지알 레더 등)는 소재가 가죽이어도 이 규칙을 적용하지 않는다.
+  const dressShoe=shoe&&/로퍼|구두|더비|드레스|부츠/.test(shoe.name||"");
+  let belt=null,reason="";
+  if(isDressBottom){belt=find(/브라이들|bridle/)||find(/그레인|grain/)||pool[0];reason="슬랙스엔 결이 단정한 가죽 벨트가 맞아요.";}
+  else if(isDenimBottom){belt=find(/위빙|브레이드|braid|weav/)||find(/그레인|grain/)||pool[0];reason="데님엔 위빙·브레이드 가죽이 가장 잘 붙어요.";}
+  else {belt=find(/그레인|grain/)||find(/위빙|브레이드|braid/)||pool[0];reason="치노·면바지엔 부드러운 내추럴 그레인이 어울려요.";}
+  out.belt=belt;
+  const brown=/브라운|brown|탄\b|카멜|버건디|와인/i;
+  const bc=(belt&&belt.color)||"", shc=(shoe&&shoe.color)||"";
+  if(dressShoe){
+    const tone=" 구두·로퍼엔 벨트와 신발의 가죽 톤을 맞추는 게 정석인데, ";
+    if(!shc)out.beltWhy=reason+tone+"신발 색이 옷장에 등록돼 있지 않아 확인이 필요해요.";
+    else if(brown.test(bc)&&brown.test(shc))out.beltWhy=reason+tone+"둘 다 브라운 계열이라 잘 맞아요.";
+    else out.beltWhy=reason+tone+"신발("+shc+")과 벨트("+(bc||"색 미등록")+") 톤이 어긋나요 — 맞는 색 벨트가 있으면 그쪽이 낫습니다.";
+  }else{
+    out.beltWhy=reason+" 신발이 스니커즈라 벨트를 신발 색에 맞출 필요는 없어요 — 하의·상의 톤에만 맞추면 됩니다.";
+  }
+  return out;
+}
+// 한 줄 문장으로 (스크립트·알림용)
+function tuckLine(g){
+  if(!g)return"";
+  const b=g.belt?`벨트 ${(g.belt.brand?g.belt.brand+" ":"")+g.belt.name}${g.belt.color?" ("+g.belt.color+")":""}`:"벨트 생략";
+  return `${g.mode} · ${b}`;
+}
+
 function fitGuide(item,role,t){
   // 기장/턱인 가이드 — 기온과 아이템 성격 반영
   const g=[];
@@ -825,7 +890,8 @@ function buildCodis(items,w){
       accessories:accessoryLayer("biz",{outer:wOuter,shirtLayer:wLayer,top,bottom,shoe}),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
-      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
+      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)},
+      tuck:tuckGuide({top,bottom,shoe},accs)});
   }
 
   // 2 데이트 (단정하면서 멋낸 스마트 캐주얼)
@@ -851,7 +917,8 @@ function buildCodis(items,w){
       accessories:accessoryLayer("minimal",{outer:needO?pick(smartOuter.length?smartOuter:wantOuter,s+7):null,shirtLayer:pickShirtLayer(top,s+8),top,bottom,shoe}),
       bag:bagSuggest(),
       texture:textureNote(top,bottom),
-      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)}});
+      fit:{top:fitGuide(top,"top",t),bottom:fitGuide(bottom,"bottom",t)},
+      tuck:tuckGuide({top,bottom,shoe},accs)});
   }
 
   // 3 자유 (편한 캐주얼 · 비 오면 방수 우선)
@@ -874,7 +941,8 @@ function buildCodis(items,w){
     R.push({title:"자유",vibe,accent,style:"casual",slots,perfume:pick(perfumes,s+2),
       accessories:accessoryLayer("casual",slots),bag:bagSuggest(),
       texture:textureNote(slots.top,slots.bottom),
-      fit:{top:fitGuide(slots.top,"top",t),bottom:fitGuide(slots.bottom,"bottom",t)}});
+      fit:{top:fitGuide(slots.top,"top",t),bottom:fitGuide(slots.bottom,"bottom",t)},
+      tuck:tuckGuide(slots,accs)});
   }
   // 각 코디에 원본 슬롯 번호 부여 (REROLL 인덱스 추적용)
   R.forEach((c,i)=>{c.origin=i;});
@@ -1123,7 +1191,7 @@ function genCandidates(items,w,limit){
     c.codes=["outer","top","bottom","shoe"].map(r=>c.slots[r]&&c.slots[r].code).filter(Boolean);
   });
   // 전문가 평가 + 가중 합의
-  uniq.forEach(evalExperts);
+  uniq.forEach(c=>{evalExperts(c);c.tuck=tuckGuide(c.slots,items.filter(i=>i.cat==="AC"));});
   uniq.sort((a,b)=>b.consensus-a.consensus);
   // 다양성 필터: (1) 2슬롯 이상 겹치면 제외 (2) 같은 상의·같은 하의는 쿼터만큼만 — 특정 아이템 독점 방지
   const nTops=new Set(uniq.map(c=>c.slots.top.code)).size;
@@ -1943,6 +2011,7 @@ let currentTab="today";
 // 옷장 필터/검색/보기 상태
 let CLOSET={cat:"ALL",sub:"ALL",brand:"ALL",color:"ALL",use:"ALL",season:"ALL",q:"",view:"card"};
 const view=document.getElementById("view");
+window.tuckGuide=tuckGuide;window.tuckLine=tuckLine;
 function esc(s){return(s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
 
 function renderWeather(){
@@ -2029,6 +2098,7 @@ function applyOverrides(codis){
     // 수정 시 핏/텍스처 가이드 재계산
     c.fit={top:fitGuide(c.slots.top,"top",WEATHER.high),bottom:fitGuide(c.slots.bottom,"bottom",WEATHER.high)};
     c.texture=textureNote(c.slots.top,c.slots.bottom);
+    if(!c.tuck)c.tuck=tuckGuide(c.slots,ITEMS.filter(i=>i.cat==="AC"));
     // 수정 시 점수 재계산
     const sc=scoreCore(c.slots.top,c.slots.bottom,c.slots.shoe);
     if(sc&&!sc.invalid){c.score=sc.total;c.base=sc.base;c.prefBonus=sc.pref;c.grade=sc.grade;c.reasons=sc.reasons;c.invalidReason=null;}
@@ -2109,6 +2179,12 @@ function renderToday(){
     });
     // 텍스처 믹스
     if(c.altTop)h+=`<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--sub);margin-top:4px"><span>↔ 상의 대안:</span><span style="color:var(--ink)">${esc(c.altTop.item.name)}</span><span>(${c.altTop.delta>=0?"+":""}${c.altTop.delta}점)</span><button class="ghost" data-alttop="${idx}" style="margin-left:auto;padding:3px 9px;font-size:11px;color:var(--sub);flex:0 0 auto">적용</button></div>`;
+    // 상의 밑단 처리 + 벨트 (사용자 지침: 항상 명시)
+    if(c.tuck){
+      const tg=c.tuck;
+      const beltTxt=tg.belt?`벨트 <b style="color:var(--ink)">${esc((tg.belt.brand?tg.belt.brand+" ":"")+tg.belt.name)}</b>${tg.belt.color?" · "+esc(tg.belt.color):""}`:"벨트 없이";
+      h+=`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;padding-top:8px;border-top:1px dashed var(--line);line-height:1.5">👔 상의 <b style="color:var(--ink)">${esc(tg.mode)}</b> · ${beltTxt}<br><span style="opacity:.85">${esc(tg.why)} ${esc(tg.beltWhy)}</span></div>`;
+    }
     if(c.texture)h+=`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;padding-top:8px;border-top:1px dashed var(--line);line-height:1.5">🧵 ${esc(c.texture)}</div>`;
     // 액세서리 레이어드
     if(c.accessories&&c.accessories.length){
