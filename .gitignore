@@ -16,3 +16,7 @@ requirements.txt
 Thumbs.db
 node_modules/
 index.html_bak
+
+# 자격증명·업로드 아카이브
+auth.txt
+frontend.zip
