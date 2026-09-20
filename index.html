@@ -573,8 +573,19 @@ function outerRequired(w){
   const low=(w&&w.low!=null)?w.low:w.high;
   return !(m>=6&&m<=8)||low<=18;
 }
-// 아우터 적정 판단 기온: 출퇴근 아침·저녁 체감 = (최고+최저)/2 (낮 최고기온으로 판단하면 가을 아우터가 전부 탈락)
-function outerTemp(w){return (w&&w.low!=null)?Math.round((w.high+w.low)/2):w.high;}
+// ===== 기준 기온: 사무실 근무(08~19시, 냉방 25° 이하)라 낮 최고기온은 옷 선택과 무관 =====
+// 바깥 기온이 실제로 영향을 주는 건 출근 전(~08시)과 퇴근 후(19시~) 뿐이다.
+// 시간별 예보가 있으면 그 두 시각의 값을, 없으면 (최고+최저)/2로 대체한다.
+function commuteTemps(w){
+  const m=(w&&w.tMorning!=null)?w.tMorning:null, e=(w&&w.tEvening!=null)?w.tEvening:null;
+  if(m!=null&&e!=null)return{morning:m,evening:e};
+  const mid=(w&&w.low!=null)?Math.round((w.high+w.low)/2):(w?w.high:20);
+  return{morning:mid,evening:mid};
+}
+// 상의·하의·신발 기준: 출근·퇴근 기온의 평균 (사무실은 25° 이하라 이 범위면 실내도 무리 없음)
+function commuteTemp(w){const c=commuteTemps(w);return Math.round((c.morning+c.evening)/2);}
+// 아우터 기준: 출근·퇴근 중 더 추운 쪽 — 바깥에 노출되는 가장 추운 순간을 견뎌야 한다
+function outerTemp(w){const c=commuteTemps(w);return Math.min(c.morning,c.evening);}
 // TPO 상태 (전역) — 사용자가 오늘 코디 탭에서 토글
 let TPO={move:"mixed",biz:false}; // move: transit(지하철/버스) | outdoor(실외) | mixed, biz: 비즈니스 캐주얼 변주
 let REROLL=[0,0,0]; // 코디별 새로고침 시드 (전체 새로 버튼)
@@ -642,7 +653,7 @@ function textureNote(top,bottom){
 
 let ACCESSORY_REFRESHER=null;
 function buildCodis(items,w){
-  const t=w.high,rain=w.rain;
+  const t=commuteTemp(w),rain=w.rain;   // 낮 최고기온이 아니라 출퇴근 기온 기준
   const wearable=items.filter(i=>useOf(i)!=="홈웨어");
   const C=c=>wearable.filter(i=>i.cat===c);
   const outers=C("OT"),tops=C("TP"),bottoms=C("BT"),shoes=C("SH"),perfumes=C("PF"),accs=C("AC");
@@ -1063,7 +1074,7 @@ function evalExperts(c){
 // 후보 생성: 옷장 전 조합 채점 → 상위 후보에 전문가 5인 평가 → 합의 점수 순 + 다양성 확보
 function genCandidates(items,w,limit){
   refreshBoosts();
-  const t=w.high;
+  const t=commuteTemp(w);   // 낮 최고기온이 아니라 출퇴근 기온 기준
   const wearable=items.filter(i=>useOf(i)!=="홈웨어");
   const ok=i=>tempFit(i,t)!=="out";
   const byBoost=(a,b)=>itemBoost(b.code)-itemBoost(a.code);
@@ -1297,7 +1308,7 @@ function parseExtOpinion(text){
 }
 // 외부 의견 → 후보 조합 생성 (빠진 슬롯은 나의 코디네이터 기준 추천으로 보완) → 내부 5인 채점
 function buildExtCandidates(ext,base,w){
-  const t=w.high,out=[];
+  const t=commuteTemp(w),out=[];   // 낮 최고기온이 아니라 출퇴근 기온 기준
   (ext||[]).forEach((o,idx)=>{
     if(o.gen||!o.comment)return;   // 자동 생성 의견은 점수 의견이라 조합 제안 없음
     const p=parseExtOpinion(o.comment);
@@ -1883,16 +1894,24 @@ let MANUAL=null;          // 수동 설정 {high,low,cond,rain} (있으면 예�
 
 async function fetchWeather(){
   try{
-    const url="https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.978&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Asia%2FSeoul&forecast_days=7";
+    const url="https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.978&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&hourly=temperature_2m&timezone=Asia%2FSeoul&forecast_days=7";
     const res=await fetch(url);
     const j=await res.json();
     const d=j.daily;
+    // 출근 직전(08시)·퇴근 직후(19시) 기온 — 사무실 밖에 있는 시간대
+    const hourAt=(date,hh)=>{
+      const hr=j.hourly; if(!hr||!hr.time)return null;
+      const idx=hr.time.indexOf(date+"T"+String(hh).padStart(2,"0")+":00");
+      return idx<0?null:Math.round(hr.temperature_2m[idx]);
+    };
     FORECAST=d.time.map((date,k)=>({
       date,
       high:Math.round(d.temperature_2m_max[k]),
       low:Math.round(d.temperature_2m_min[k]),
       code:d.weather_code[k],
-      rainProb:d.precipitation_probability_max[k]||0
+      rainProb:d.precipitation_probability_max[k]||0,
+      tMorning:hourAt(date,8),
+      tEvening:hourAt(date,19)
     }));
     if(!SELECTED_DATE)SELECTED_DATE=FORECAST[0].date;
     applyWeather();
@@ -1905,7 +1924,7 @@ function applyWeather(){
     WEATHER={high:MANUAL.high,low:MANUAL.low,cond:MANUAL.cond,rain:MANUAL.rain,date:(SELECTED_DATE||new Date().toISOString().slice(0,10))+" (수동)",loading:false,manual:true};
   }else if(FORECAST){
     const f=FORECAST.find(x=>x.date===SELECTED_DATE)||FORECAST[0];
-    WEATHER={high:f.high,low:f.low,cond:condText(f.code),
+    WEATHER={high:f.high,low:f.low,tMorning:f.tMorning,tEvening:f.tEvening,cond:condText(f.code),
       rain:f.rainProb>=50||[51,53,55,61,63,65,80,81,82,95,96,99].includes(f.code),
       date:f.date,loading:false,manual:false};
   }
@@ -2023,7 +2042,8 @@ function renderToday(){
   codis=applyOverrides(codis);
   if(ACCESSORY_REFRESHER)codis=ACCESSORY_REFRESHER(codis); // 수동 교체된 신발·하의에도 벨트를 다시 맞춤
   CURRENT_CODIS=codis;
-  const note=WEATHER.high>=25?"덥고 습한 날씨라 통기성과 가벼운 핏 위주로 골랐어요.":WEATHER.high>=19?"활동하기 좋은 기온이라 레이어드 여지를 뒀어요.":WEATHER.high>=13?"선선하니 가벼운 아우터가 좋아요.":"쌀쌀하니 아우터를 챙기는 게 좋아요.";
+  const tC=commuteTemp(WEATHER);
+  const note=tC>=25?"덥고 습한 날씨라 통기성과 가벼운 핏 위주로 골랐어요.":tC>=19?"활동하기 좋은 기온이라 레이어드 여지를 뒀어요.":tC>=13?"선선하니 가벼운 아우터가 좋아요.":"쌀쌀하니 아우터를 챙기는 게 좋아요.";
   const subj=WEATHER.manual?"설정하신 날씨":(WEATHER.date.includes("오늘")||(FORECAST&&WEATHER.date===FORECAST[0].date)?"오늘 서울은":WEATHER.date+" 서울은");
   let h=renderWeatherPanel();
   // TPO 패널
@@ -2037,7 +2057,7 @@ function renderToday(){
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
       <input type="checkbox" id="tpo-biz" ${TPO.biz?"checked":""}> 비즈니스 캐주얼 변주 (블레이저 추가)</label>
   </div>`;
-  h+=`<div style="font-size:13.5px;color:var(--sub);margin-bottom:14px;line-height:1.6">${WEATHER.manual?"":esc(subj)} <b style="color:var(--ink)">${esc(WEATHER.cond)} · 최고 ${WEATHER.high}° / 최저 ${WEATHER.low}°</b>${WEATHER.manual?" 기준입니다.":" 입니다."} ${note}</div>`;
+  h+=`<div style="font-size:13.5px;color:var(--sub);margin-bottom:14px;line-height:1.6">${WEATHER.manual?"":esc(subj)} <b style="color:var(--ink)">${esc(WEATHER.cond)} · 최고 ${WEATHER.high}° / 최저 ${WEATHER.low}° · 출퇴근 ${outerTemp(WEATHER)}~${tC}°</b>${WEATHER.manual?" 기준입니다.":" 입니다."} ${note}</div>`;
   // 이달의 가이드 룩 (연간 스타일링 가이드)
   const mg=MONTHLY_GUIDE[new Date().getMonth()+1];
   if(mg)h+=`<div class="card" style="padding:13px 15px;margin-bottom:14px;border-left:3px solid #b8935f">
