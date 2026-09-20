@@ -155,7 +155,7 @@ const SEED=[
 {code:"BT006",cat:"BT",brand:"Uniqlo",name:"감탄 슬랙스",size:"33",color:"네이비",fit:"레귤러",material:"혼방",note:"비즈니스 스마트 필수"},
 {code:"BT007",cat:"BT",brand:"Levi's",name:"502",size:"32x30",color:"인디고",material:"데님"},
 {code:"BT008",cat:"BT",brand:"Levi's",name:"541™ Athletic Taper",size:"33x30",color:"인디고",material:"데님"},
-{code:"BT009",cat:"BT",brand:"Levi's",name:"568™ Loose Linen+ Denim",size:"33x30",color:"Tinted Heavy Metal",material:"데님"},
+{code:"BT009",cat:"BT",brand:"Levi's",name:"568™ Loose Linen+ Denim",size:"33x30",color:"차콜 그레이",material:"데님",note:"워시명 Tinted Heavy Metal · 사용자 확인: 차콜 그레이 계열"},
 {code:"BT010",cat:"BT",brand:"Levi's",name:"LVC 1954 501® ORGANIC RIGID",size:"36x34",color:"인디고",fit:"스트레이트",material:"데님",note:"생지, 소킹 후 수축"},
 {code:"BT011",cat:"BT",brand:"지오다노",name:"아이보리 치노 팬츠",size:"33",color:"아이보리",fit:"레귤러",material:"면",note:"미니멀 룩"},
 {code:"BT012",cat:"BT",brand:"Hazzys",name:"코튼 치노 팬츠",size:"32",color:"네이비",fit:"레귤러",material:"면",note:"스마트 치노"},
@@ -277,7 +277,10 @@ function mergeRequired(items){
     OT004:{brand:"Uniqlo",name:"해링턴 자켓",color:"올리브",note:"캐주얼 해링턴 아우터"},
     OT005:{brand:"Polo Ralph Lauren",name:"해링턴 자켓",color:"베이지",note:"스마트 캐주얼 · 밝고 부드러운 인상"},
     // 핸드볼 스페지알 2족을 스웨이드/가죽으로 분리 — SH008은 스웨이드로 확정
-    SH008:{brand:"Adidas",name:"핸드볼 스페지알 스웨이드",color:"크림",material:"스웨이드",note:"크림 스웨이드 갑피 · 네이비 삼선 · 검 밑창 · 부드러운 질감"}
+    SH008:{brand:"Adidas",name:"핸드볼 스페지알 스웨이드",color:"크림",material:"스웨이드",note:"크림 스웨이드 갑피 · 네이비 삼선 · 검 밑창 · 부드러운 질감"},
+    // 568 리넨 데님 워시명(Tinted Heavy Metal)은 색을 알 수 없어 톤·명도가 잘못 잡혔다.
+    // 사용자 확인 결과 차콜 그레이 계열 → COOL·DARK로 판정되도록 색상값을 교정한다.
+    BT009:{color:"차콜 그레이",note:"워시명 Tinted Heavy Metal · 사용자 확인: 차콜 그레이 계열"}
   };
   Object.entries(outerCorrections).forEach(([code,fields])=>{
     const idx=out.findIndex(item=>item.code===code);if(idx<0)return;
